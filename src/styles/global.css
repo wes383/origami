@@ -577,6 +577,96 @@ button:disabled {
   opacity: 1;
 }
 
+/* 文本层（pdf.js TextLayer）：透明文字精确定位在 canvas 之上，
+   文字本身不可见（颜色透明），但可被鼠标选中 / 复制 / 检索。
+   --total-scale-factor 由 PdfPage 在渲染时按当前倍率写入 */
+.pdf-page {
+  /* TextLayer 内部用 round(down, … , var(--scale-round-*)) 计算容器尺寸 */
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+
+.pdf-text-layer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(
+    var(--total-scale-factor, 1) * var(--min-font-size)
+  );
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: clip;
+  text-align: initial;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+  /* PDF 页面不参与主题反色：深色模式下纸面依旧是白的，
+     文本层要按"白纸"走配色，否则 UA 会用深色系选区色（在白纸上不可见） */
+  color-scheme: only light;
+}
+
+.pdf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  /* --font-height / --scale-x / --rotate 由 TextLayer 逐 span 内联写入 */
+  font-size: calc(var(--text-scale-factor) * var(--font-height, 0px));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1))
+    scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer span[role="img"] {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 选区背景：不区分主题，一律按白纸配色（见上方 color-scheme 注释）。
+   alpha 取中等值——跨行选区相邻 span 的盒子会重叠，太实会叠出深色带 */
+.pdf-text-layer ::selection {
+  background: rgba(0, 100, 255, 0.22);
+  background: color-mix(in srgb, AccentColor, transparent 72%);
+  color: transparent;
+}
+
+.pdf-text-layer br::selection {
+  background: transparent;
+}
+
+/* endOfContent：空白区选区补丁（lib/textLayerSelection.ts）。
+   默认贴在文本内容底部（inset 100% 0 0，高度 0）；选中期间 top:0 盖住整层，
+   z-index 0 压在 span 之下 —— 空白处的命中落在它身上，而不是 DOM 顺序里
+   下一段文字，避免"往空白拖意外选中大段 / 选区被取消" */
+.pdf-text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pdf-text-layer.selecting .endOfContent {
+  top: 0;
+}
+
 .pdf-page-placeholder {
   position: absolute;
   inset: 0;

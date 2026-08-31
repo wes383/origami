@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import {
+  bindTextLayerSelection,
+  unbindTextLayerSelection,
+} from "../lib/textLayerSelection";
 
 interface PdfPageProps {
   doc: PDFDocumentProxy;
@@ -22,14 +27,22 @@ export default function PdfPage({
   visible,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
   const [rendered, setRendered] = useState(false);
   /** 本页真实尺寸（渲染后回填，替代按首页估算的占位值） */
   const [actualSize, setActualSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
+    // 倍率/文档变化时先清空旧文本层：其 span 按百分比定位，倍率变了会错位
+    const container = textLayerRef.current;
+    if (container) {
+      container.replaceChildren();
+      container.style.removeProperty("--total-scale-factor");
+    }
     if (!visible) return;
     let cancelled = false;
     let renderTask: { cancel(): void } | null = null;
+    let textLayer: TextLayer | null = null;
 
     (async () => {
       try {
@@ -57,15 +70,41 @@ export default function PdfPage({
         });
         renderTask = task;
         await task.promise;
-        if (!cancelled) setRendered(true);
+        if (cancelled) return;
+        setRendered(true);
+
+        // 文本层：把透明文字覆盖到 canvas 上，使页面内容可被选中 / 复制
+        const textContent = await page.getTextContent();
+        if (cancelled) return;
+        const layerEl = textLayerRef.current;
+        if (!layerEl) return;
+        // TextLayer 用 --total-scale-factor 换算字号与容器尺寸（内部定位走百分比）
+        layerEl.style.setProperty("--total-scale-factor", String(scale));
+        textLayer = new TextLayer({
+          textContentSource: textContent,
+          container: layerEl,
+          viewport,
+        });
+        await textLayer.render();
+        if (cancelled) return;
+
+        // endOfContent + 全局选区监听：修复"拖到空白区域意外选中大段文字 /
+        // 选区被取消"（pdf.js 官方 viewer 同款方案，见 lib/textLayerSelection.ts）
+        const endOfContent = document.createElement("div");
+        endOfContent.className = "endOfContent";
+        layerEl.append(endOfContent);
+        bindTextLayerSelection(layerEl, endOfContent);
       } catch {
         /* 渲染取消或失败时静默处理 */
       }
     })();
 
+    const layerDiv = textLayerRef.current;
     return () => {
       cancelled = true;
       renderTask?.cancel();
+      textLayer?.cancel();
+      if (layerDiv) unbindTextLayerSelection(layerDiv);
     };
   }, [doc, pageNumber, scale, visible]);
 
@@ -79,6 +118,7 @@ export default function PdfPage({
       style={{ width: boxW, height: boxH }}
     >
       <canvas ref={canvasRef} className={rendered ? "is-rendered" : ""} />
+      <div ref={textLayerRef} className="pdf-text-layer" />
       {!rendered && (
         <div className="pdf-page-placeholder" aria-hidden="true">
           <span>{pageNumber}</span>
