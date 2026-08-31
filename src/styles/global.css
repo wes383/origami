@@ -1,0 +1,916 @@
+/* ==========================================================================
+   PDF 阅读器 — 基于 Orkest UI 设计语言
+   暖色极简：米白背景 #fcfbfa、单色墨色 accent、药丸圆角、低对比边框
+   ========================================================================== */
+
+:root {
+  /* 字体体系（对齐 Orkest：Inter 正文 / Manrope 标题 / JetBrains Mono 数字） */
+  --font-sans: "Inter Variable", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope Variable", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "Noto Sans SC", ui-monospace,
+    "SFMono-Regular", Menlo, monospace;
+
+  /* ── 颜色 tokens（浅色，对齐 orkest-ui lightTokens） ── */
+  --background: #fcfbfa;
+  --surface: #ffffff;
+  --surface-60: rgba(255, 255, 255, 0.6);
+  --foreground: #25242a;
+  --foreground-muted: #6d6770;
+  --foreground-subtle: #9f99a3;
+  --foreground-faint: #b0a9b2;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --ring: rgba(0, 0, 0, 0.22);
+  --hover-bg: rgba(0, 0, 0, 0.035);
+  --hover-bg-strong: rgba(0, 0, 0, 0.06);
+  --overlay: rgba(0, 0, 0, 0.18);
+  --accent: #25242a;
+  --accent-hover: #000000;
+  --accent-fg: #ffffff;
+  --accent-muted: rgba(37, 36, 42, 0.08);
+
+  /* 语义色 */
+  --red: #dc2626;
+  --red-fg: #b91c1c;
+  --red-soft: #fef2f2;
+  --red-border: #fecaca;
+
+  /* ── 圆角 tokens ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* ── 阴影 tokens ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 24, 35, 0.06);
+  --shadow-pop: 0 20px 45px rgba(28, 24, 35, 0.1);
+
+  /* ── 动效 tokens ── */
+  --duration-fast: 100ms;
+  --duration-base: 150ms;
+  --duration-slow: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] {
+  --background: #101010;
+  --surface: #181818;
+  --surface-60: rgba(24, 24, 24, 0.6);
+  --foreground: #f5f5f5;
+  --foreground-muted: #a3a3a3;
+  --foreground-subtle: #737373;
+  --foreground-faint: #6a6570;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.25);
+  --ring: rgba(255, 255, 255, 0.3);
+  --hover-bg: rgba(255, 255, 255, 0.06);
+  --hover-bg-strong: rgba(255, 255, 255, 0.1);
+  --overlay: rgba(0, 0, 0, 0.55);
+  --accent: #f5f5f5;
+  --accent-hover: #ffffff;
+  --accent-fg: #111111;
+  --accent-muted: rgba(245, 245, 245, 0.1);
+
+  --red: #fca5a5;
+  --red-fg: #f87171;
+  --red-soft: rgba(239, 68, 68, 0.12);
+  --red-border: rgba(248, 113, 113, 0.45);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 20px 45px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   布局骨架
+   ========================================================================== */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.reader {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* ==========================================================================
+   工具栏 — Orkest 风格：surface 背景 + 发丝边框
+   ========================================================================== */
+
+.toolbar {
+  display: grid;
+  /* 两侧轨道等宽可收缩，中间组严格居中 */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding-left: 12px;
+  /* 右侧给 tauri-plugin-frame 注入的窗口控制按钮留位（3 × 46px） */
+  padding-right: max(12px, var(--tauri-frame-controls-width, 138px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  z-index: 10;
+  flex-shrink: 0;
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+/* tauri-plugin-frame 注入的标题栏层（fixed，z-index 100）位于工具栏之上，
+   右上角窗口按钮因此可见。但该层覆盖顶部整行，若可命中会吞掉工具栏的
+   点击/拖拽——这里整层禁用命中，仅对内部三个窗口按钮恢复；
+   窗口拖拽由 .toolbar 的 data-tauri-drag-region 承担 */
+[data-tauri-frame-tb] {
+  pointer-events: none;
+}
+
+/* 修复按钮命中区错位：插件注入层是 flex 行，内部先放一个 width:100% 的拖拽区，
+   再追加 3 个 46px 按钮；总宽溢出后按钮被 flex-shrink 压缩（按窗口宽度浮动，
+   1100px 宽时每颗约被压 5px），实际按钮整体变窄、右对齐位置前移。
+   而原生 snap overlay 是硬按「3 × 46px 右对齐」定位的（覆盖 [W-92, W-46]），
+   于是 overlay 会压到最小化按钮右侧一小条，那里的点击被系统按 HTMAXBUTTON
+   处理 → 触发最大化而非最小化。
+   禁止按钮收缩，使其与 overlay 的命中区严格对齐 */
+[data-tauri-frame-tb] > [data-tauri-drag-region] {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+[data-tauri-frame-tb] button {
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tb-left {
+  justify-self: start;
+}
+
+.tb-center {
+  justify-self: center;
+}
+
+.tb-right {
+  justify-self: end;
+  justify-content: flex-end;
+}
+
+/* 中间组隐藏（未打开文件）时：两列布局，右侧组落到第二列靠右 */
+.toolbar.no-center {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.tb-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+/* 通用工具栏按钮 — Orkest ghost 药丸按钮 */
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  color: var(--foreground-muted);
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.tb-btn:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+.tb-btn:active {
+  transform: scale(0.97);
+}
+
+.tb-btn.is-active {
+  /* 不加持久背景高亮（与 hover 态难以区分，视觉上像 hover 卡住），
+     激活态仅以更深的图标颜色指示；当前模式由图标本身区分 */
+  color: var(--foreground);
+}
+
+.icon-only {
+  padding: 0;
+}
+
+/* 文件名 */
+.file-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--foreground);
+  padding: 0 4px;
+}
+
+/* 页码指示器 — mono 数字 + 药丸容器 */
+.page-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 6px 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--hover-bg);
+}
+
+.page-input {
+  width: 38px;
+  height: 28px;
+  text-align: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out);
+}
+
+.page-input:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.page-total {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--foreground-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-right: 4px;
+}
+
+/* 缩放输入 — mono 数字 + 药丸容器（与页码指示器同构） */
+.zoom-indicator {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 36px;
+  padding: 0 6px 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--hover-bg);
+}
+
+.zoom-input {
+  width: 44px;
+  height: 28px;
+  text-align: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out);
+}
+
+.zoom-input:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.zoom-unit {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--foreground-subtle);
+  padding-right: 4px;
+}
+
+/* 设置下拉菜单 */
+.tb-menu {
+  position: relative;
+}
+
+.tb-btn.is-open {
+  background: var(--hover-bg-strong);
+  color: var(--foreground);
+}
+
+.tb-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: dropdown-in var(--duration-base) var(--ease-out);
+}
+
+/* 菜单按钮在左侧时，下拉向左展开 */
+.tb-dropdown-left {
+  right: auto;
+  left: 0;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tb-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  color: var(--foreground-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tb-dropdown-item:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+/* 危险操作（关闭文件）hover 用浅红提示 */
+.tb-dropdown-item.is-danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+}
+
+.tb-dropdown-separator {
+  height: 1px;
+  margin: 6px 10px;
+  background: var(--border);
+}
+
+.tb-dropdown-label {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 450;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--foreground-faint);
+}
+
+.tb-dropdown-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 6px 6px;
+}
+
+/* 菜单行内的只读数值（如当前缩放百分比） */
+.tb-dropdown-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 30px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground-muted);
+  white-space: nowrap;
+}
+
+.tb-dropdown-choice {
+  flex: 1;
+  height: 30px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--foreground-muted);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.tb-dropdown-choice:hover:not(.is-active) {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+.tb-dropdown-choice.is-active {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+/* ==========================================================================
+   阅读区
+   ========================================================================== */
+
+.pdf-viewer {
+  height: 100%;
+  overflow: auto;
+  background: var(--background);
+  transition: background-color var(--duration-base) var(--ease-out);
+  scrollbar-width: thin;
+  scrollbar-color: var(--hover-bg-strong) transparent;
+}
+
+.pdf-viewer::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.pdf-viewer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pdf-viewer::-webkit-scrollbar-thumb {
+  background: var(--hover-bg-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.pdf-viewer::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-subtle);
+  background-clip: content-box;
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 0;
+  min-height: 100%;
+  /* 水平留白不放在容器上：页面放大溢出时是子元素溢出，
+     容器的右 padding 会被越过，滚动到最右时没有右边距 */
+}
+
+.pdf-slot {
+  flex-shrink: 0;
+  /* auto margin 居中：空间不足时 margin 归零，内容贴边，可完整滚动 */
+  margin-inline: auto;
+  /* 留白放在 slot 上，随页面一起参与溢出计算，保证两侧边距始终可见 */
+  padding-inline: 24px;
+}
+
+.mode-single .pdf-slot {
+  margin-block: auto;
+}
+
+.pdf-page {
+  position: relative;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition: box-shadow var(--duration-slow) var(--ease-out);
+}
+
+.pdf-page canvas {
+  display: block;
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.pdf-page canvas.is-rendered {
+  opacity: 1;
+}
+
+.pdf-page-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--hover-bg);
+}
+
+.pdf-page-placeholder span {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   空状态 — Orkest Empty：虚线边框容器 + 居中排版
+   ========================================================================== */
+
+.empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--background);
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 24px;
+  width: 460px;
+  max-width: 100%;
+  background: var(--surface-60);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  animation: fade-slide-in var(--duration-slower, 300ms) var(--ease-out) both;
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 最近打开面板 — Orkest surface 卡片 */
+.recent-panel {
+  width: 460px;
+  max-width: 100%;
+  background: var(--surface-60);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  animation: fade-slide-in var(--duration-slower, 300ms) var(--ease-out) both;
+}
+
+.recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 6px;
+}
+
+.recent-title {
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0.02em;
+  color: var(--foreground-muted);
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recent-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.recent-item:hover {
+  background: var(--hover-bg);
+}
+
+.recent-item > svg {
+  flex-shrink: 0;
+  color: var(--foreground-muted);
+}
+
+.recent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/** 列表项尾部操作（打开所在文件夹 / 移除） */
+.recent-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--foreground-faint);
+  cursor: pointer;
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.recent-action:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+/* 主按钮 — 无背景药丸（ghost） */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 22px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--foreground);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.btn-primary:hover {
+  background: var(--hover-bg);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+/* ==========================================================================
+   覆盖层：拖拽 / 加载 / 错误
+   ========================================================================== */
+
+.drag-overlay {
+  position: fixed;
+  inset: 52px 0 0 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+}
+
+.drag-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 52px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--foreground-muted);
+  font-weight: 500;
+  font-size: 14px;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  animation: fade-slide-in 200ms var(--ease-out) both;
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* Orkest Spinner：border-2 + accent 顶边 */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--hover-bg-strong);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-overlay .spinner {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #ffffff;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 错误提示 — Orkest 语义红 */
+.error-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  background: var(--red-soft);
+  border: 1px solid var(--red-border);
+  color: var(--red-fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: var(--shadow-pop);
+  animation: toast-in 200ms var(--ease-out) both;
+  max-width: min(86vw, 480px);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ==========================================================================
+   响应式：窄窗口紧凑模式
+   注意：媒体查询按宽度从宽到窄排列，保证窄断点覆盖宽断点
+   ========================================================================== */
+
+/* 较窄窗口（≤900px）：控件较多改为左对齐排布（仍单行） */
+@media (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .toolbar.no-center {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .tb-center {
+    justify-self: start;
+  }
+}
+
+/* 更窄窗口（≤720px）：隐藏文件名，保留菜单 + 页码切换 */
+@media (max-width: 720px) {
+  .toolbar {
+    padding-left: 8px;
+    padding-right: max(8px, var(--tauri-frame-controls-width, 138px));
+    gap: 2px;
+  }
+
+  .file-name {
+    display: none;
+  }
+
+  .tb-divider {
+    margin: 0 2px;
+  }
+
+  .zoom-input {
+    width: 36px;
+    font-size: 12px;
+  }
+
+  .page-indicator {
+    padding: 0 4px;
+  }
+
+  .pdf-pages {
+    padding: 14px 0;
+    gap: 12px;
+  }
+
+  .pdf-slot {
+    padding-inline: 12px;
+  }
+}
