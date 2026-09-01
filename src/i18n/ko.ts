@@ -18,6 +18,7 @@ export const ko: Record<LangKeys, string> = {
   rotatePage: "페이지 회전",
   print: "인쇄",
   fileProperties: "파일 속성",
+  moreActions: "더 많은 작업",
   preparingPrint: "인쇄 준비 중…",
   printAll: "모든 페이지",
   printCurrent: "현재 페이지",

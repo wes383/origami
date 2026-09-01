@@ -16,6 +16,7 @@ export const zh = {
   rotatePage: "旋转页面",
   print: "打印",
   fileProperties: "文件属性",
+  moreActions: "更多操作",
   preparingPrint: "正在准备打印…",
   printAll: "全部页",
   printCurrent: "当前页",

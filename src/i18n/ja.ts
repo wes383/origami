@@ -18,6 +18,7 @@ export const ja: Record<LangKeys, string> = {
   rotatePage: "ページを回転",
   print: "印刷",
   fileProperties: "ファイルのプロパティ",
+  moreActions: "その他の操作",
   preparingPrint: "印刷を準備中…",
   printAll: "すべてのページ",
   printCurrent: "現在のページ",

@@ -18,6 +18,7 @@ import {
   LanguagesIcon,
   ListIcon,
   MinusIcon,
+  MoreIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
@@ -29,8 +30,8 @@ import {
 } from "./Icons";
 import type { SidebarTab } from "./Sidebar";
 
-/** ≤此宽度时隐藏工具栏缩放控件（改由设置菜单提供） */
-const ZOOM_HIDDEN_BELOW = 560;
+/** ≤此宽度时隐藏工具栏缩放控件（改由「更多操作」菜单提供） */
+const ZOOM_HIDDEN_BELOW = 650;
 
 /** 全屏 auto-hide「顶部区域」边界：鼠标在该 y 内（工具栏高 52 + 缓冲 8）
     唤醒工具栏；之外则延迟隐藏。唤醒与隐藏共用同一把尺子 —— 快移甩动鼠标后
@@ -146,11 +147,14 @@ export default function Toolbar({
   const [zoomInput, setZoomInput] = useState(String(Math.round(effScale * 100)));
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  /** 更多操作下拉菜单 */
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   /** 语言二级菜单（向右 flyout，portal 到 body 避免被下拉菜单的滚动裁切） */
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const langWrapRef = useRef<HTMLDivElement | null>(null);
   const langMenuDomRef = useRef<HTMLDivElement | null>(null);
-  /** ≤560px 时工具栏缩放控件隐藏，改由设置菜单提供 */
+  /** ≤650px 时工具栏缩放控件隐藏，改由「更多操作」菜单提供 */
   const [narrow, setNarrow] = useState(
     () => window.innerWidth <= ZOOM_HIDDEN_BELOW
   );
@@ -163,6 +167,7 @@ export default function Toolbar({
   /** 菜单打开时禁止隐藏（下拉在工具栏下方展开，鼠标落在其上是合法交互） */
   const menuOpenRef = useRef(menuOpen);
   const langMenuOpenRef = useRef(langMenuOpen);
+  const moreOpenRef = useRef(moreOpen);
 
   useEffect(() => {
     menuOpenRef.current = menuOpen;
@@ -171,6 +176,10 @@ export default function Toolbar({
   useEffect(() => {
     langMenuOpenRef.current = langMenuOpen;
   }, [langMenuOpen]);
+
+  useEffect(() => {
+    moreOpenRef.current = moreOpen;
+  }, [moreOpen]);
 
   useEffect(() => {
     fsBarPinnedRef.current = fsBarPinned;
@@ -228,6 +237,7 @@ export default function Toolbar({
       if (
         y <= FS_BAR_SHOW_ZONE ||
         menuOpenRef.current ||
+        moreOpenRef.current ||
         langMenuOpenRef.current
       ) {
         clearHideTimer();
@@ -278,6 +288,23 @@ export default function Toolbar({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [menuOpen]);
+
+  // 点击更多菜单外部 / Esc 关闭
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(e.target as Node)) setMoreOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [moreOpen]);
 
   // 语言二级菜单：点击其外部（含设置菜单内其他区域、portal 后的菜单本体）即关闭；
   // 窗口缩放或下拉菜单滚动时位置会错位，直接收起
@@ -352,7 +379,12 @@ export default function Toolbar({
         // 鼠标离开工具栏：延迟隐藏（菜单打开时鼠标在下拉菜单上，保持显示）。
         // DOM pointerleave 在鼠标移出元素（含移到原生 Snap Overlay 上）时必然
         // 触发，比全局 clientY 阈值可靠。锁定工具栏时永不隐藏。
-        if (fsBarPinned || menuOpenRef.current || langMenuOpenRef.current)
+        if (
+          fsBarPinned ||
+          menuOpenRef.current ||
+          moreOpenRef.current ||
+          langMenuOpenRef.current
+        )
           return;
         if (!fsHideTimerRef.current) {
           fsHideTimerRef.current = window.setTimeout(() => {
@@ -377,41 +409,6 @@ export default function Toolbar({
           >
             <SettingsIcon />
           </button>
-
-          {/* 全屏时在菜单按钮右侧提供退出全屏入口（右上角 Snap Overlay 原生子窗口
-              会吞掉右上角区域的点击，见 global.css .fs-on 段注释，故不放右上角） */}
-          {isFullscreen && (
-            <button
-              type="button"
-              className="tb-btn icon-only"
-              onClick={onToggleFullscreen}
-              title={t("exitFullscreen")}
-              aria-label={t("exitFullscreen")}
-            >
-              <FullscreenExitIcon />
-            </button>
-          )}
-
-          {/* 锁定工具栏：点击后永久固定（不再 auto-hide），再次点击解锁 */}
-          {isFullscreen && (
-            <button
-              type="button"
-              className="tb-btn icon-only"
-              onClick={() => {
-                setFsBarPinned((v) => !v);
-                // 取消可能已调度的隐藏定时，避免解锁瞬间工具栏闪没
-                if (fsHideTimerRef.current) {
-                  window.clearTimeout(fsHideTimerRef.current);
-                  fsHideTimerRef.current = null;
-                }
-              }}
-              title={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
-              aria-label={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
-              aria-pressed={fsBarPinned}
-            >
-              {fsBarPinned ? <PinOffIcon /> : <PinIcon />}
-            </button>
-          )}
 
           {menuOpen && (
             <div
@@ -475,190 +472,22 @@ export default function Toolbar({
                 </>
               )}
 
-              {!disabled && (
+              {disabled && (
                 <>
                   <div className="tb-dropdown-separator" />
-
-                  {/* 目录侧边栏开关（仅当前文档含目录时提供） */}
-                  {outlineAvailable && (
-                    <button
-                      type="button"
-                      className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "outline" ? "is-active" : ""}`}
-                      role="menuitemcheckbox"
-                      aria-checked={sidebarOpen && sidebarTab === "outline"}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onToggleSidebar("outline");
-                      }}
-                    >
-                      <ListIcon />
-                      <span>{t("toc")}</span>
-                      {sidebarOpen && sidebarTab === "outline" && (
-                        <span className="tb-item-check">
-                          <CheckIcon size={14} />
-                        </span>
-                      )}
-                    </button>
-                  )}
-
-                  {/* 页面缩略图侧边栏开关 */}
+                  {/* 全屏：仅主页（无文档）时在此提供；文档打开后由「更多操作」按钮提供 */}
                   <button
                     type="button"
-                    className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "thumbnails" ? "is-active" : ""}`}
-                    role="menuitemcheckbox"
-                    aria-checked={sidebarOpen && sidebarTab === "thumbnails"}
+                    className="tb-dropdown-item"
+                    role="menuitem"
                     onClick={() => {
                       setMenuOpen(false);
-                      onToggleSidebar("thumbnails");
+                      onToggleFullscreen();
                     }}
                   >
-                    <GridIcon />
-                    <span>{t("thumbnails")}</span>
-                    {sidebarOpen && sidebarTab === "thumbnails" && (
-                      <span className="tb-item-check">
-                        <CheckIcon size={14} />
-                      </span>
-                    )}
+                    {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                    <span>{isFullscreen ? t("exitFullscreen") : t("fullscreen")}</span>
                   </button>
-
-                  {/* 右侧 AI 面板开关 */}
-                  <button
-                    type="button"
-                    className={`tb-dropdown-item ${rightPanelOpen ? "is-active" : ""}`}
-                    role="menuitemcheckbox"
-                    aria-checked={rightPanelOpen}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onToggleRightPanel();
-                    }}
-                  >
-                    <LanguagesIcon />
-                    <span>{t("aiSidebar")}</span>
-                    {rightPanelOpen && (
-                      <span className="tb-item-check">
-                        <CheckIcon size={14} />
-                      </span>
-                    )}
-                  </button>
-                </>
-              )}
-
-              {/* 全屏：始终显示（主页无文档时也可全屏）；与上方「有文档专属」项之间以 separator 分隔 */}
-              <div className="tb-dropdown-separator" />
-              <button
-                type="button"
-                className="tb-dropdown-item"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onToggleFullscreen();
-                }}
-              >
-                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-                <span>{isFullscreen ? t("exitFullscreen") : t("fullscreen")}</span>
-              </button>
-
-              {!disabled && (
-                <button
-                  type="button"
-                  className="tb-dropdown-item"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onRotate();
-                  }}
-                >
-                  <RotateIcon />
-                  <span>{t("rotatePage")}</span>
-                </button>
-              )}
-
-              <div className="tb-dropdown-label">{t("pageLayout")}</div>
-              <div className="tb-dropdown-row">
-                <button
-                  type="button"
-                  className={`tb-dropdown-choice ${pageLayout === "single" ? "is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={pageLayout === "single"}
-                  onClick={() => onPageLayoutChange("single")}
-                >
-                  {t("singlePage")}
-                </button>
-                <button
-                  type="button"
-                  className={`tb-dropdown-choice ${pageLayout === "double" ? "is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={pageLayout === "double"}
-                  onClick={() => onPageLayoutChange("double")}
-                >
-                  {t("doublePage")}
-                </button>
-              </div>
-
-              <div className="tb-dropdown-label">{t("flipMode")}</div>
-              <div className="tb-dropdown-row">
-                <button
-                  type="button"
-                  className={`tb-dropdown-choice ${flipMode === "scroll" ? "is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={flipMode === "scroll"}
-                  onClick={() => onFlipModeChange("scroll")}
-                >
-                  {t("continuous")}
-                </button>
-                <button
-                  type="button"
-                  className={`tb-dropdown-choice ${flipMode === "paged" ? "is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={flipMode === "paged"}
-                  onClick={() => onFlipModeChange("paged")}
-                >
-                  {t("paged")}
-                </button>
-              </div>
-
-              {narrow && (
-                <>
-                  <div className="tb-dropdown-separator" />
-
-                  <div className="tb-dropdown-label">{t("zoom")}</div>
-                  <div className="tb-dropdown-row">
-                    <button
-                      type="button"
-                      className="tb-dropdown-choice"
-                      role="menuitem"
-                      onClick={onZoomOut}
-                      disabled={disabled || !canZoomOut}
-                      aria-label={t("zoomOut")}
-                      title={t("zoomOut")}
-                    >
-                      <MinusIcon />
-                    </button>
-                    <span className="tb-dropdown-value">
-                      {Math.round(effScale * 100)}%
-                    </span>
-                    <button
-                      type="button"
-                      className="tb-dropdown-choice"
-                      role="menuitem"
-                      onClick={onZoomIn}
-                      disabled={disabled || !canZoomIn}
-                      aria-label={t("zoomIn")}
-                      title={t("zoomIn")}
-                    >
-                      <PlusIcon />
-                    </button>
-                  </div>
-                  <div className="tb-dropdown-row">
-                    <button
-                      type="button"
-                      className="tb-dropdown-choice"
-                      role="menuitem"
-                      onClick={onToggleFit}
-                    >
-                      {fitIntent === "fit-width" ? t("fitWidth") : t("fitPage")}
-                    </button>
-                  </div>
                 </>
               )}
 
@@ -910,6 +739,284 @@ export default function Toolbar({
             </button>
           </>
         )}
+
+        {/* 全屏时的退出全屏与锁定工具栏按钮：置于查找与更多操作之间
+            （原在左侧菜单旁；右上角 Snap Overlay 原生子窗口会吞掉右上角的点击，
+            见 global.css .fs-on 段注释，故不放右上角） */}
+        {isFullscreen && (
+          <button
+            type="button"
+            className="tb-btn icon-only"
+            onClick={onToggleFullscreen}
+            title={t("exitFullscreen")}
+            aria-label={t("exitFullscreen")}
+          >
+            <FullscreenExitIcon />
+          </button>
+        )}
+
+        {isFullscreen && (
+          <button
+            type="button"
+            className="tb-btn icon-only"
+            onClick={() => {
+              setFsBarPinned((v) => !v);
+              // 取消可能已调度的隐藏定时，避免解锁瞬间工具栏闪没
+              if (fsHideTimerRef.current) {
+                window.clearTimeout(fsHideTimerRef.current);
+                fsHideTimerRef.current = null;
+              }
+            }}
+            title={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
+            aria-label={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
+            aria-pressed={fsBarPinned}
+          >
+            {fsBarPinned ? <PinOffIcon /> : <PinIcon />}
+          </button>
+        )}
+
+        {/* 更多操作：位于查找按钮右侧；窄屏隐藏缩放控件时，这些功能也收进此菜单 */}
+        <div className="tb-menu" ref={moreMenuRef}>
+          <button
+            type="button"
+            className={`tb-btn icon-only ${moreOpen ? "is-open" : ""}`}
+            onClick={() => setMoreOpen((v) => !v)}
+            title={t("moreActions")}
+            aria-label={t("moreActions")}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+          >
+            <MoreIcon />
+          </button>
+
+          {moreOpen && (
+            <div className="tb-dropdown" role="menu">
+              {/* 目录侧边栏开关（仅当前文档含目录时提供） */}
+              {outlineAvailable && (
+                <button
+                  type="button"
+                  className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "outline" ? "is-active" : ""}`}
+                  role="menuitemcheckbox"
+                  aria-checked={sidebarOpen && sidebarTab === "outline"}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onToggleSidebar("outline");
+                  }}
+                >
+                  <ListIcon />
+                  <span>{t("toc")}</span>
+                  {sidebarOpen && sidebarTab === "outline" && (
+                    <span className="tb-item-check">
+                      <CheckIcon size={14} />
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* 页面缩略图侧边栏开关 */}
+              <button
+                type="button"
+                className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "thumbnails" ? "is-active" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={sidebarOpen && sidebarTab === "thumbnails"}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onToggleSidebar("thumbnails");
+                }}
+              >
+                <GridIcon />
+                <span>{t("thumbnails")}</span>
+                {sidebarOpen && sidebarTab === "thumbnails" && (
+                  <span className="tb-item-check">
+                    <CheckIcon size={14} />
+                  </span>
+                )}
+              </button>
+
+              {/* 翻译侧边栏开关 */}
+              <button
+                type="button"
+                className={`tb-dropdown-item ${rightPanelOpen ? "is-active" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={rightPanelOpen}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onToggleRightPanel();
+                }}
+              >
+                <LanguagesIcon />
+                <span>{t("aiSidebar")}</span>
+                {rightPanelOpen && (
+                  <span className="tb-item-check">
+                    <CheckIcon size={14} />
+                  </span>
+                )}
+              </button>
+
+              <div className="tb-dropdown-separator" />
+
+              {/* 全屏 */}
+              <button
+                type="button"
+                className="tb-dropdown-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onToggleFullscreen();
+                }}
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                <span>{isFullscreen ? t("exitFullscreen") : t("fullscreen")}</span>
+              </button>
+
+              {/* 锁定工具栏：仅全屏时提供（点击后永久固定，不再 auto-hide） */}
+              {isFullscreen && (
+                <button
+                  type="button"
+                  className={`tb-dropdown-item ${fsBarPinned ? "is-active" : ""}`}
+                  role="menuitemcheckbox"
+                  aria-checked={fsBarPinned}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setFsBarPinned((v) => !v);
+                    // 取消可能已调度的隐藏定时，避免解锁瞬间工具栏闪没
+                    if (fsHideTimerRef.current) {
+                      window.clearTimeout(fsHideTimerRef.current);
+                      fsHideTimerRef.current = null;
+                    }
+                  }}
+                >
+                  {fsBarPinned ? <PinOffIcon /> : <PinIcon />}
+                  <span>{fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}</span>
+                  {fsBarPinned && (
+                    <span className="tb-item-check">
+                      <CheckIcon size={14} />
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* 旋转页面 */}
+              <button
+                type="button"
+                className="tb-dropdown-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onRotate();
+                }}
+              >
+                <RotateIcon />
+                <span>{t("rotatePage")}</span>
+              </button>
+
+              <div className="tb-dropdown-label">{t("pageLayout")}</div>
+              <div className="tb-dropdown-row">
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${pageLayout === "single" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={pageLayout === "single"}
+                  onClick={() => onPageLayoutChange("single")}
+                >
+                  {t("singlePage")}
+                </button>
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${pageLayout === "double" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={pageLayout === "double"}
+                  onClick={() => onPageLayoutChange("double")}
+                >
+                  {t("doublePage")}
+                </button>
+              </div>
+
+              <div className="tb-dropdown-label">{t("flipMode")}</div>
+              <div className="tb-dropdown-row">
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${flipMode === "scroll" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={flipMode === "scroll"}
+                  onClick={() => onFlipModeChange("scroll")}
+                >
+                  {t("continuous")}
+                </button>
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${flipMode === "paged" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={flipMode === "paged"}
+                  onClick={() => onFlipModeChange("paged")}
+                >
+                  {t("paged")}
+                </button>
+              </div>
+
+              {/* 窄屏时工具栏隐藏的查找与缩放控件收进这里 */}
+              {narrow && (
+                <>
+                  <div className="tb-dropdown-separator" />
+
+                  <div className="tb-dropdown-label">{t("zoom")}</div>
+                  <div className="tb-dropdown-row">
+                    <button
+                      type="button"
+                      className="tb-dropdown-choice"
+                      role="menuitem"
+                      onClick={onZoomOut}
+                      disabled={disabled || !canZoomOut}
+                      aria-label={t("zoomOut")}
+                      title={t("zoomOut")}
+                    >
+                      <MinusIcon />
+                    </button>
+                    <span className="tb-dropdown-value">
+                      {Math.round(effScale * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      className="tb-dropdown-choice"
+                      role="menuitem"
+                      onClick={onZoomIn}
+                      disabled={disabled || !canZoomIn}
+                      aria-label={t("zoomIn")}
+                      title={t("zoomIn")}
+                    >
+                      <PlusIcon />
+                    </button>
+                  </div>
+                  <div className="tb-dropdown-row">
+                    <button
+                      type="button"
+                      className="tb-dropdown-choice"
+                      role="menuitem"
+                      onClick={onToggleFit}
+                    >
+                      {fitIntent === "fit-width" ? t("fitWidth") : t("fitPage")}
+                    </button>
+                  </div>
+
+                  {/* 查找（窄屏时工具栏按钮隐藏，由这里提供入口，置于菜单最底部） */}
+                  <div className="tb-dropdown-separator" />
+                  <button
+                    type="button"
+                    className="tb-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onOpenSearch();
+                    }}
+                  >
+                    <SearchIcon />
+                    <span>{t("search")}</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       )}
 

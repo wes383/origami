@@ -356,6 +356,17 @@ export function RotateIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 更多操作（lucide more-horizontal，三点） */
+export function MoreIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="5" cy="12" r="1" fill="currentColor" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+      <circle cx="19" cy="12" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** 打印（lucide printer） */
 export function PrinterIcon({ size = 16 }: IconProps) {
   return (

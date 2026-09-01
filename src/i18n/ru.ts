@@ -18,6 +18,7 @@ export const ru: Record<LangKeys, string> = {
   rotatePage: "Повернуть страницу",
   print: "Печать",
   fileProperties: "Свойства файла",
+  moreActions: "Другие действия",
   preparingPrint: "Подготовка к печати…",
   printAll: "Все страницы",
   printCurrent: "Текущая страница",

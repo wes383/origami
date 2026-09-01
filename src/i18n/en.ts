@@ -18,6 +18,7 @@ export const en: Record<LangKeys, string> = {
   rotatePage: "Rotate Page",
   print: "Print",
   fileProperties: "File Properties",
+  moreActions: "More actions",
   preparingPrint: "Preparing print…",
   printAll: "All Pages",
   printCurrent: "Current Page",
