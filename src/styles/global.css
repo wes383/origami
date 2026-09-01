@@ -27,6 +27,10 @@
   --ring: rgba(0, 0, 0, 0.22);
   --hover-bg: rgba(0, 0, 0, 0.035);
   --hover-bg-strong: rgba(0, 0, 0, 0.06);
+  /* 滚动条 thumb：独立 token（hover-bg-strong 只有 6% 透明度，作滚动条太浅
+     不可辨认；hover-bg 同时被按钮 hover 背景使用，不能整体加深） */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.24);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.4);
   --overlay: rgba(0, 0, 0, 0.18);
   --accent: #25242a;
   --accent-hover: #000000;
@@ -74,6 +78,8 @@
   --ring: rgba(255, 255, 255, 0.3);
   --hover-bg: rgba(255, 255, 255, 0.06);
   --hover-bg-strong: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.46);
   --overlay: rgba(0, 0, 0, 0.55);
   --accent: #f5f5f5;
   --accent-hover: #ffffff;
@@ -269,7 +275,7 @@ button:disabled {
   overflow-y: auto;
   padding: 0 8px 12px;
   scrollbar-width: thin;
-  scrollbar-color: var(--hover-bg-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .outline-list::-webkit-scrollbar {
@@ -277,7 +283,7 @@ button:disabled {
 }
 
 .outline-list::-webkit-scrollbar-thumb {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
@@ -453,7 +459,7 @@ button:disabled {
   overflow-y: auto;
   padding: 4px 12px 16px;
   scrollbar-width: thin;
-  scrollbar-color: var(--hover-bg-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .thumb-list::-webkit-scrollbar {
@@ -461,7 +467,7 @@ button:disabled {
 }
 
 .thumb-list::-webkit-scrollbar-thumb {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
@@ -868,7 +874,7 @@ button:disabled {
   box-shadow: var(--shadow-md);
   animation: dropdown-in var(--duration-base) var(--ease-out);
   scrollbar-width: thin;
-  scrollbar-color: var(--hover-bg-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .tb-dropdown::-webkit-scrollbar {
@@ -881,14 +887,14 @@ button:disabled {
 }
 
 .tb-dropdown::-webkit-scrollbar-thumb {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 .tb-dropdown::-webkit-scrollbar-thumb:hover {
-  background: var(--foreground-subtle);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* 菜单按钮在左侧时，下拉向左展开 */
@@ -1120,7 +1126,7 @@ button:disabled {
   background: var(--background);
   transition: background-color var(--duration-base) var(--ease-out);
   scrollbar-width: thin;
-  scrollbar-color: var(--hover-bg-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .pdf-viewer::-webkit-scrollbar {
@@ -1133,14 +1139,14 @@ button:disabled {
 }
 
 .pdf-viewer::-webkit-scrollbar-thumb {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 .pdf-viewer::-webkit-scrollbar-thumb:hover {
-  background: var(--foreground-subtle);
+  background: var(--scrollbar-thumb-hover);
   background-clip: content-box;
 }
 
@@ -2250,7 +2256,7 @@ button:disabled {
   overflow-y: auto;
   padding: 0 20px 20px;
   scrollbar-width: thin;
-  scrollbar-color: var(--hover-bg-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .tr-form::-webkit-scrollbar {
@@ -2258,7 +2264,7 @@ button:disabled {
 }
 
 .tr-form::-webkit-scrollbar-thumb {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
@@ -2300,7 +2306,7 @@ button:disabled {
   overflow-y: auto;
   padding: 6px 20px 20px;
   scrollbar-width: thin;
-  scrollbar-color: var(--hover-bg-strong) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .sc-body::-webkit-scrollbar {
@@ -2308,7 +2314,7 @@ button:disabled {
 }
 
 .sc-body::-webkit-scrollbar-thumb {
-  background: var(--hover-bg-strong);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
