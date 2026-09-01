@@ -581,6 +581,27 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* 全屏沉浸（App.tsx 在进入/退出全屏时给 <html> 挂/摘 .fs-on）：
+   隐藏 tauri-plugin-frame 注入的窗口控制按钮 —— 全屏下最小化/最大化均无意义
+   （最大化按钮走 toggleMaximize，全屏时不会正确响应，是死按钮），且按钮会盖住
+   PDF 页面边缘，破坏沉浸阅读。退出全屏走：左上角菜单按钮右侧的退出按钮 /
+   F11 / 设置菜单项（快捷键面板已列出）。
+   注意 --tauri-frame-controls-width 必须用 !important：
+   controls.js 的 updateFrameInset 在 resize（含全屏切换）时会把该变量按
+   innerWidth - 按钮rect.left 重写成 inline style，按钮隐藏后 rect.left=0 会写出
+   整个窗口宽度；!important 声明在 CSS 规范中压过普通 inline style。
+   注意：右上角区域（含工具栏右端、悬浮元素）永远不要放交互元素 —— snap.rs
+   的原生 Snap Overlay 子窗口（模拟最大化按钮命中，覆盖 [宽-92, 宽-46] × [0,52]）
+   会吞掉点击并触发 snap/click → toggleMaximize，给全屏窗口错误打上 WS_MAXIMIZE，
+   退出全屏后呈最大化 → 底部黑条。这也是退出按钮放在左上角而非右上角的原因。 */
+.fs-on [id^="frame-tb-"] {
+  display: none !important;
+}
+
+.fs-on {
+  --tauri-frame-controls-width: 0px !important;
+}
+
 .tb-group {
   display: flex;
   align-items: center;

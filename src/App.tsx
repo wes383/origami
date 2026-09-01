@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -161,6 +161,15 @@ export default function App() {
       .then(setIsFullscreen)
       .catch(() => {});
   }, []);
+
+  useLayoutEffect(() => {
+    // 全屏沉浸：给 <html> 挂 fs-on class —— 隐藏 tauri-plugin-frame 注入的
+    // 窗口控制按钮（最小化/最大化/关闭），并收回工具栏右上角预留宽度。
+    // 用 useLayoutEffect（而非 useEffect）：按钮渲染同帧就位，避免进入全屏时
+    // 按钮先出现在 Snap Overlay 覆盖区（右上角 y≤52px）一帧。
+    // 对应规则见 global.css 的 .fs-on 段；退出全屏仍走 F11 / 设置菜单。
+    document.documentElement.classList.toggle("fs-on", isFullscreen);
+  }, [isFullscreen]);
 
   const effScale =
     scaleMode === "fit-width"

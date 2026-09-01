@@ -3,6 +3,7 @@ import type { LangKeys } from "./zh";
 export const ja: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "全画面表示",
+  exitFullscreen: "全画面表示を終了",
   shortcutFullscreen: "全画面表示の切り替え",
   openDropHint: "または PDF ファイルをここへドラッグして開く",
   openPdf: "PDF を開く",

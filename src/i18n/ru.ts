@@ -3,6 +3,7 @@ import type { LangKeys } from "./zh";
 export const ru: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "Полноэкранный режим",
+  exitFullscreen: "Выйти из полноэкранного режима",
   shortcutFullscreen: "Переключить полноэкранный режим",
   openDropHint: "Или перетащите PDF-файл сюда, чтобы открыть",
   openPdf: "Открыть PDF",

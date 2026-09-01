@@ -208,10 +208,12 @@ export default function Toolbar({
 
   return (
     // data-tauri-drag-region 使工具栏空白区域可作为窗口拖拽区（子元素交互不受影响）；
+    // 全屏时属性改为 "false"（tauri 的 drag.js 运行时读属性，"false" = 显式禁用，
+    // 阻止该元素及其祖先的拖拽）——全屏窗口不应被拖动；
     // 右上角窗口按钮由 tauri-plugin-frame 注入（z-index 100 层，浮于工具栏之上）
     <header
       className={`toolbar ${disabled ? "no-center" : ""}`}
-      data-tauri-drag-region
+      data-tauri-drag-region={isFullscreen ? "false" : ""}
     >
       {/* 左：菜单 + 文件名 */}
       <div className="tb-group tb-left">
@@ -228,6 +230,20 @@ export default function Toolbar({
           >
             <SettingsIcon />
           </button>
+
+          {/* 全屏时在菜单按钮右侧提供退出全屏入口（右上角 Snap Overlay 原生子窗口
+              会吞掉右上角区域的点击，见 global.css .fs-on 段注释，故不放右上角） */}
+          {isFullscreen && (
+            <button
+              type="button"
+              className="tb-btn icon-only"
+              onClick={onToggleFullscreen}
+              title={t("exitFullscreen")}
+              aria-label={t("exitFullscreen")}
+            >
+              <FullscreenExitIcon />
+            </button>
+          )}
 
           {menuOpen && (
             <div
@@ -323,25 +339,23 @@ export default function Toolbar({
                       </span>
                     )}
                   </button>
-
-                  <div className="tb-dropdown-separator" />
                 </>
               )}
 
-              {!disabled && (
-                <button
-                  type="button"
-                  className="tb-dropdown-item"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onToggleFullscreen();
-                  }}
-                >
-                  {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-                  <span>{t("fullscreen")}</span>
-                </button>
-              )}
+              {/* 全屏：始终显示（主页无文档时也可全屏）；与上方「有文档专属」项之间以 separator 分隔 */}
+              <div className="tb-dropdown-separator" />
+              <button
+                type="button"
+                className="tb-dropdown-item"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onToggleFullscreen();
+                }}
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                <span>{isFullscreen ? t("exitFullscreen") : t("fullscreen")}</span>
+              </button>
 
               {!disabled && (
                 <button

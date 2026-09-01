@@ -1,6 +1,7 @@
 export const zh = {
   docTitle: "Origami",
   fullscreen: "全屏",
+  exitFullscreen: "退出全屏",
   shortcutFullscreen: "切换全屏",
   openDropHint: "或将 PDF 文件拖拽到此处打开",
   openPdf: "打开 PDF",
