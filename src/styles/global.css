@@ -621,6 +621,30 @@ button:disabled {
   pointer-events: none;
 }
 
+/* 全屏唤醒探针条（Toolbar.tsx 全屏且未固定时渲染，紧跟 header 之后）：
+   屏幕顶部 fixed 透明热区，高度覆盖整个工具栏区域（var(--toolbar-h)），
+   独立于工具栏本体（工具栏隐藏时整体移出屏幕外）。
+   默认 pointer-events:none —— 显示态绝不拦截工具栏（工具栏 z-index 10，
+   探针条 z-index 30，若可命中会盖住全部按钮）；仅当工具栏处于 toolbar-hidden
+   （已移出屏幕、pointer-events:none）时，相邻兄弟选择器才把探针条启用为
+   「顶部区域的交互代理」：鼠标移入触发 pointerenter 唤醒（DOM enter 事件不依赖
+   mousemove 采样，快移停驻在 y<52 必命中，此前 8px 窄带会漏），移出触发
+   pointerleave 延迟隐藏。
+   注意：探针条必须紧跟 header（相邻兄弟选择器依赖 DOM 顺序）。 */
+.fs-bar-probe {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--toolbar-h); /* 与 Toolbar.tsx 的 FS_BAR_SHOW_ZONE(52+8) 同区域 */
+  z-index: 30; /* 高于工具栏(10)、低于下拉菜单(50)/弹窗(90) */
+  pointer-events: none;
+}
+
+.fs-on .toolbar.toolbar-hidden + .fs-bar-probe {
+  pointer-events: auto;
+}
+
 .tb-group {
   display: flex;
   align-items: center;

@@ -31,12 +31,22 @@ import type { SidebarTab } from "./Sidebar";
 /** ≤此宽度时隐藏工具栏缩放控件（改由设置菜单提供） */
 const ZOOM_HIDDEN_BELOW = 560;
 
-/** 全屏 auto-hide：鼠标移到屏幕顶边该 y 内唤醒工具栏滑入 */
-const FS_BAR_WAKE_ZONE = 8;
-/** 兜底隐藏阈值：鼠标在此 y 外且菜单未开时延迟隐藏（主路径是 pointerleave） */
+/** 全屏 auto-hide「顶部区域」边界：鼠标在该 y 内（工具栏高 52 + 缓冲 8）
+    唤醒工具栏；之外则延迟隐藏。唤醒与隐藏共用同一把尺子 —— 快移甩动鼠标后
+    停驻位置常在 y 8~60 之间，唤醒带过窄（如 8px）会漏掉，导致工具栏不出现 */
 const FS_BAR_SHOW_ZONE = 60;
 /** 移出工具栏区域后延迟隐藏的毫秒数（防鼠标快速掠过误触发） */
 const FS_BAR_HIDE_DELAY = 400;
+
+/** auto-hide 的全局指针事件：优先 pointerrawupdate（Chromium 原始事件流，
+    不做 coalescing 合并）。触控板快速滑动时事件流极密，WebView2 对
+    pointermove 的合并可能让最后一个事件停在半路（实际指针已到顶部）导致
+    唤醒漏判；pointerrawupdate 每帧原始上报，无合并丢失。非 Chromium
+    环境回退 pointermove。 */
+const POINTER_EVT: "pointerrawupdate" | "pointermove" =
+  typeof window !== "undefined" && "onpointerrawupdate" in window
+    ? "pointerrawupdate"
+    : "pointermove";
 
 interface ToolbarProps {
   fileName: string;
@@ -156,13 +166,27 @@ export default function Toolbar({
     fsBarPinnedRef.current = fsBarPinned;
   }, [fsBarPinned]);
 
+  /** 记录上一个全屏状态：进入全屏（false→true）时默认固定工具栏，
+      用户可点图钉自行取消；退出全屏时由 auto-hide effect 重置回非固定 */
+  const prevFullscreenRef = useRef(isFullscreen);
+  useEffect(() => {
+    if (isFullscreen && !prevFullscreenRef.current) {
+      setFsBarPinned(true);
+    }
+    prevFullscreenRef.current = isFullscreen;
+  }, [isFullscreen]);
+
   // 全屏 auto-hide 工具栏。隐藏路径以 DOM 的 pointerleave 为准（鼠标离开工具栏
   // 元素必然触发，不受原生 Snap Overlay 拦截 / clientY 阈值 / 事件丢失影响）；
   // 全局 pointermove 只负责两件事：
-  //   1) 唤醒：鼠标移到屏幕顶边窄带（y ≤ FS_BAR_WAKE_ZONE）→ 滑入
+  //   1) 唤醒：鼠标在「顶部区域」（y ≤ FS_BAR_SHOW_ZONE）→ 滑入。
+  //      唤醒带与工具栏区域同宽（52+8），而非窄边带 —— 快移甩动鼠标后停驻
+  //      位置常在 y 8~60 之间，窄唤醒带（如 8px）会漏掉导致工具栏不出现；
+  //      与顶部唤醒探针条（.fs-bar-probe，覆盖同一区域）双保险。
   //   2) 兜底：鼠标在 y > FS_BAR_SHOW_ZONE 且菜单未开 → 延迟隐藏
   //      （覆盖「菜单关闭后鼠标停留在内容区」等没有 leave 触发的场景）
-  // 中间带（8 < y ≤ 60）不动：鼠标刚离开工具栏时隐藏由 pointerleave 定时驱动。
+  // 顶部区域内不会触发隐藏（唤醒幂等）；隐藏统一由 header/探针条 pointerleave
+  // 定时驱动，全局坐标不再参与隐藏判定。
   // 菜单打开时禁止隐藏（下拉在工具栏下方展开，鼠标落在其上是合法交互）。
   useEffect(() => {
     if (!isFullscreen) {
@@ -192,7 +216,7 @@ export default function Toolbar({
       if (fsBarPinnedRef.current) return;
       const y = e.clientY;
       if (
-        y <= FS_BAR_WAKE_ZONE ||
+        y <= FS_BAR_SHOW_ZONE ||
         menuOpenRef.current ||
         langMenuOpenRef.current
       ) {
@@ -201,11 +225,13 @@ export default function Toolbar({
       } else if (y > FS_BAR_SHOW_ZONE) {
         scheduleHide();
       }
-      // 8 < y ≤ 60：保持现状，隐藏由 header 的 onPointerLeave 定时驱动
     };
-    window.addEventListener("pointermove", onPointerMove);
+    // pointerrawupdate 与 pointermove 的联合事件名会让 TS 把监听器推断为
+    // 通用 EventListener，需断言回 PointerEvent（clientY 来自 PointerEvent）
+    const onPointerMoveHandler = onPointerMove as EventListener;
+    window.addEventListener(POINTER_EVT, onPointerMoveHandler);
     return () => {
-      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener(POINTER_EVT, onPointerMoveHandler);
       clearHideTimer();
     };
   }, [isFullscreen]);
@@ -288,6 +314,16 @@ export default function Toolbar({
   const prevDisabled = disabled || currentPage <= 1;
   const nextDisabled = disabled || currentPage >= numPages;
 
+  /** 显示工具栏：清掉待执行的隐藏定时并置可见。
+      被 header 的 onPointerEnter 与顶部唤醒探针条共用 */
+  const showFsBar = () => {
+    if (fsHideTimerRef.current) {
+      window.clearTimeout(fsHideTimerRef.current);
+      fsHideTimerRef.current = null;
+    }
+    setFsBarVisible(true);
+  };
+
   const switchLang = (next: (typeof UI_LANGS)[number]["id"]) => setLang(next);
 
   return (
@@ -295,19 +331,13 @@ export default function Toolbar({
     // 全屏时属性改为 "false"（tauri 的 drag.js 运行时读属性，"false" = 显式禁用，
     // 阻止该元素及其祖先的拖拽）——全屏窗口不应被拖动；
     // 右上角窗口按钮由 tauri-plugin-frame 注入（z-index 100 层，浮于工具栏之上）
-    <header
-      className={`toolbar ${disabled ? "no-center" : ""} ${
-        isFullscreen && !fsBarPinned && !fsBarVisible ? "toolbar-hidden" : ""
-      }`}
-      data-tauri-drag-region={isFullscreen ? "false" : ""}
-      onPointerEnter={() => {
-        // 鼠标进入工具栏：保持显示并取消隐藏定时
-        if (fsHideTimerRef.current) {
-          window.clearTimeout(fsHideTimerRef.current);
-          fsHideTimerRef.current = null;
-        }
-        setFsBarVisible(true);
-      }}
+    <>
+      <header
+        className={`toolbar ${disabled ? "no-center" : ""} ${
+          isFullscreen && !fsBarPinned && !fsBarVisible ? "toolbar-hidden" : ""
+        }`}
+        data-tauri-drag-region={isFullscreen ? "false" : ""}
+        onPointerEnter={showFsBar}
       onPointerLeave={() => {
         // 鼠标离开工具栏：延迟隐藏（菜单打开时鼠标在下拉菜单上，保持显示）。
         // DOM pointerleave 在鼠标移出元素（含移到原生 Snap Overlay 上）时必然
@@ -842,5 +872,20 @@ export default function Toolbar({
 
       {/* 右：占位列。窗口控制按钮由 tauri-plugin-frame 注入（Windows 11 原生样式 + Snap Layout） */}
     </header>
+      {/* 全屏唤醒探针条：必须紧跟 header 之后（CSS 用相邻兄弟选择器在
+          隐藏态启用/显示态禁用）；若放在 header 前面，+ 选择器永不匹配，
+          显示态时探针条会以 z-index 30 盖住工具栏（z-index 10）挡住按钮。
+          只挂 onPointerEnter（唤醒）—— 绝不能挂 onPointerLeave：探针条在
+          唤醒后随 toolbar-hidden 移除而变 pointer-events:none，浏览器会
+          因此触发一次「伪 pointerleave」（鼠标未动也触发），若在此调度
+          隐藏，工具栏会刚滑入又被隐藏（「鼠标移到顶部工具栏消失」）。 */}
+      {isFullscreen && !fsBarPinned && (
+        <div
+          className="fs-bar-probe"
+          onPointerEnter={showFsBar}
+          aria-hidden="true"
+        />
+      )}
+    </>
   );
 }
