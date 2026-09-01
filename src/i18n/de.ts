@@ -113,4 +113,8 @@ export const de: Record<LangKeys, string> = {
   searchStop: "Suche stoppen",
   clearAllRecent: "Alle zuletzt geöffneten Dateien löschen",
   errorMultipleFiles: "Es kann nur eine Datei gleichzeitig geöffnet werden",
+  // Inhaltsverzeichnis-Suche
+  tocSearchPlaceholder: "Inhaltsverzeichnis durchsuchen…",
+  tocMatchCount: "{n} Treffer",
+  tocNoMatch: "Keine passenden Einträge",
 };

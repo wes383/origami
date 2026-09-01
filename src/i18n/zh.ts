@@ -113,6 +113,10 @@ export const zh = {
   searchStop: "停止查找",
   clearAllRecent: "清空最近打开",
   errorMultipleFiles: "一次只能打开一个文件",
+  // 目录搜索
+  tocSearchPlaceholder: "搜索目录…",
+  tocMatchCount: "{n} 个结果",
+  tocNoMatch: "未找到匹配的目录项",
 };
 
 export type LangKeys = keyof typeof zh;

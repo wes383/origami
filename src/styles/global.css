@@ -360,6 +360,86 @@ button:disabled {
   color: var(--foreground-muted);
 }
 
+/* 目录搜索框 */
+.outline-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 16px 8px;
+  padding: 5px 8px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.outline-search-lead {
+  display: inline-flex;
+  color: var(--foreground-faint);
+  flex-shrink: 0;
+}
+
+.outline-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12.5px;
+}
+
+.outline-search-input::placeholder {
+  color: var(--foreground-faint);
+}
+
+.outline-search-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--foreground-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.outline-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--foreground-faint);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.outline-search-clear:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+/* 目录命中高亮 */
+.outline-hl {
+  background: var(--accent-muted);
+  color: var(--foreground);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* 无匹配结果 */
+.outline-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--foreground-faint);
+  font-size: 12.5px;
+}
+
 /* ==========================================================================
    页面缩略图
    ========================================================================== */

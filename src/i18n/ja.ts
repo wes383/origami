@@ -113,4 +113,8 @@ export const ja: Record<LangKeys, string> = {
   searchStop: "検索を停止",
   clearAllRecent: "最近開いたファイルをすべて消去",
   errorMultipleFiles: "同時に開けるファイルは 1 つだけです",
+  // 目次検索
+  tocSearchPlaceholder: "目次を検索…",
+  tocMatchCount: "{n} 件",
+  tocNoMatch: "一致する項目がありません",
 };

@@ -113,4 +113,8 @@ export const ko: Record<LangKeys, string> = {
   searchStop: "검색 중지",
   clearAllRecent: "최근 항목 모두 지우기",
   errorMultipleFiles: "한 번에 하나의 파일만 열 수 있습니다",
+  // 목차 검색
+  tocSearchPlaceholder: "목차 검색…",
+  tocMatchCount: "{n}개 결과",
+  tocNoMatch: "일치하는 항목 없음",
 };

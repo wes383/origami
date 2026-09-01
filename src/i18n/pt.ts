@@ -113,4 +113,8 @@ export const pt: Record<LangKeys, string> = {
   searchStop: "Parar a pesquisa",
   clearAllRecent: "Limpar todos os ficheiros recentes",
   errorMultipleFiles: "Só é possível abrir um ficheiro de cada vez",
+  // Pesquisa no sumário
+  tocSearchPlaceholder: "Pesquisar no sumário…",
+  tocMatchCount: "{n} resultados",
+  tocNoMatch: "Nenhuma entrada correspondente",
 };

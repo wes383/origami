@@ -3,7 +3,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { docKey, type OutlineNode } from "../lib/pdf";
 import { renderCacheGet, renderCacheSet, thumbCacheKey } from "../lib/renderCache";
 import { useI18n } from "../i18n";
-import { ChevronDownIcon, ChevronRightIcon, XIcon } from "./Icons";
+import { ChevronDownIcon, ChevronRightIcon, SearchIcon, XIcon } from "./Icons";
 
 export type SidebarTab = "outline" | "thumbnails";
 
@@ -96,6 +96,67 @@ interface FlatEntry {
   parentIds: string[];
 }
 
+/** 过滤后的目录节点（保留与查询匹配的整条路径） */
+interface FilteredNode extends OutlineNode {
+  /** 自身标题是否命中查询 */
+  matchSelf: boolean;
+  children: FilteredNode[];
+}
+
+/**
+ * 按标题过滤目录树：保留标题命中或任一后代命中的节点，并标记 matchSelf 以便高亮。
+ * 空查询返回 null（此时使用原始树，不进入搜索态）。
+ */
+function filterOutline(nodes: OutlineNode[], query: string): FilteredNode[] | null {
+  if (!query) return null;
+  const lower = query.toLowerCase();
+  const walk = (items: OutlineNode[]): FilteredNode[] => {
+    const out: FilteredNode[] = [];
+    for (const n of items) {
+      const matchSelf = n.title.toLowerCase().includes(lower);
+      const children = walk(n.children);
+      if (matchSelf || children.length > 0) {
+        out.push({ ...n, matchSelf, children });
+      }
+    }
+    return out;
+  };
+  return walk(nodes);
+}
+
+/** 把命中子串切分为片段，命中片段用于高亮 */
+function splitHighlight(
+  title: string,
+  query: string
+): { text: string; hit: boolean }[] {
+  if (!query) return [{ text: title, hit: false }];
+  const lower = title.toLowerCase();
+  const q = query.toLowerCase();
+  const parts: { text: string; hit: boolean }[] = [];
+  let i = 0;
+  for (;;) {
+    const idx = lower.indexOf(q, i);
+    if (idx === -1) {
+      if (i < title.length) parts.push({ text: title.slice(i), hit: false });
+      break;
+    }
+    if (idx > i) parts.push({ text: title.slice(i, idx), hit: false });
+    parts.push({ text: title.slice(idx, idx + q.length), hit: true });
+    i = idx + q.length;
+  }
+  return parts;
+}
+
+/** 前序查找第一个命中且含页码的节点（供回车跳转） */
+function firstMatch(nodes: FilteredNode[]): FilteredNode | null {
+  for (const n of nodes) {
+    if (n.matchSelf && n.page != null) return n;
+    const c = firstMatch(n.children);
+    if (c) return c;
+  }
+  return null;
+}
+
 function OutlineTree({
   outline,
   currentPage,
@@ -105,9 +166,29 @@ function OutlineTree({
   currentPage: number;
   onNavigate: (page: number) => void;
 }) {
+  const { t } = useI18n();
   /** 展开的节点 id 集合；初始全部折叠 */
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  /** 目录搜索词（空 = 未搜索） */
+  const [query, setQuery] = useState("");
   const activeRowRef = useRef<HTMLButtonElement | null>(null);
+
+  const trimmed = query.trim();
+  /** null 表示未搜索，渲染完整目录树 */
+  const filtered = useMemo(() => filterOutline(outline, trimmed), [outline, trimmed]);
+
+  /** 命中条目数（仅搜索态有意义） */
+  const matchCount = useMemo(() => {
+    if (!filtered) return 0;
+    let c = 0;
+    const walk = (ns: FilteredNode[]) =>
+      ns.forEach((n) => {
+        if (n.matchSelf) c++;
+        walk(n.children);
+      });
+    walk(filtered);
+    return c;
+  }, [filtered]);
 
   // 前序遍历扁平化
   const flat = useMemo<FlatEntry[]>(() => {
@@ -131,9 +212,28 @@ function OutlineTree({
     return id;
   }, [flat, currentPage]);
 
-  // 祖先自动展开 + 活动行滚动到可见
+  // 搜索态：自动展开所有含子级的过滤节点，使命中路径完整可见；
+  // 退出搜索（清空）时回到默认全折叠
   useEffect(() => {
-    if (!activeId) return;
+    if (!filtered) {
+      setExpanded(new Set());
+      return;
+    }
+    const all = new Set<string>();
+    const walk = (ns: FilteredNode[]) =>
+      ns.forEach((n) => {
+        if (n.children.length) {
+          all.add(n.id);
+          walk(n.children);
+        }
+      });
+    walk(filtered);
+    setExpanded(all);
+  }, [filtered]);
+
+  // 祖先自动展开 + 活动行滚动到可见（仅非搜索态）
+  useEffect(() => {
+    if (!activeId || filtered) return;
     const entry = flat.find((e) => e.node.id === activeId);
     if (!entry) return;
     setExpanded((prev) => {
@@ -146,7 +246,7 @@ function OutlineTree({
     requestAnimationFrame(() => {
       activeRowRef.current?.scrollIntoView({ block: "nearest" });
     });
-  }, [activeId, flat]);
+  }, [activeId, flat, filtered]);
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -192,7 +292,21 @@ function OutlineTree({
               ) : (
                 <span className="outline-toggle outline-toggle-leaf" />
               )}
-              <span className="outline-title">{node.title || "—"}</span>
+              <span className="outline-title">
+                {trimmed ? (
+                  splitHighlight(node.title, trimmed).map((p, i) =>
+                    p.hit ? (
+                      <mark key={i} className="outline-hl">
+                        {p.text}
+                      </mark>
+                    ) : (
+                      <span key={i}>{p.text}</span>
+                    )
+                  )
+                ) : (
+                  (node.title || "—")
+                )}
+              </span>
               {node.page != null && (
                 <span className="outline-page">{node.page}</span>
               )}
@@ -204,7 +318,52 @@ function OutlineTree({
     </div>
   );
 
-  return <nav className="outline-list">{renderNodes(outline)}</nav>;
+  return (
+    <>
+      <div className="outline-search">
+        <span className="outline-search-lead">
+          <SearchIcon size={14} />
+        </span>
+        <input
+          className="outline-search-input"
+          type="text"
+          value={query}
+          placeholder={t("tocSearchPlaceholder")}
+          aria-label={t("tocSearchPlaceholder")}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && filtered) {
+              const f = firstMatch(filtered);
+              if (f?.page != null) onNavigate(f.page);
+            } else if (e.key === "Escape") {
+              setQuery("");
+            }
+          }}
+        />
+        {trimmed && (
+          <>
+            <span className="outline-search-count">
+              {t("tocMatchCount").replace("{n}", String(matchCount))}
+            </span>
+            <button
+              type="button"
+              className="outline-search-clear"
+              onClick={() => setQuery("")}
+              title={t("searchClose")}
+              aria-label={t("searchClose")}
+            >
+              <XIcon size={13} />
+            </button>
+          </>
+        )}
+      </div>
+      {filtered && filtered.length === 0 ? (
+        <div className="outline-empty">{t("tocNoMatch")}</div>
+      ) : (
+        <nav className="outline-list">{renderNodes(filtered ?? outline)}</nav>
+      )}
+    </>
+  );
 }
 
 /* ==========================================================================

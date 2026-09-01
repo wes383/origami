@@ -113,4 +113,8 @@ export const en: Record<LangKeys, string> = {
   searchStop: "Stop searching",
   clearAllRecent: "Clear all recent files",
   errorMultipleFiles: "Only one file can be opened at a time",
+  // TOC search
+  tocSearchPlaceholder: "Search outline…",
+  tocMatchCount: "{n} result(s)",
+  tocNoMatch: "No matching entries",
 };

@@ -113,4 +113,8 @@ export const ru: Record<LangKeys, string> = {
   searchStop: "Остановить поиск",
   clearAllRecent: "Очистить список недавних файлов",
   errorMultipleFiles: "Одновременно можно открыть только один файл",
+  // Поиск по оглавлению
+  tocSearchPlaceholder: "Поиск по оглавлению…",
+  tocMatchCount: "{n} совпадений",
+  tocNoMatch: "Подходящих разделов не найдено",
 };
