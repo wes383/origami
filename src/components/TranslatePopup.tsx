@@ -15,13 +15,15 @@ import {
   buildContext,
   describeAiError,
   detectMode,
+  getActiveProfile,
   isAiConfigured,
   loadAiConfig,
+  saveAiConfig,
   translateSelection,
   type TranslateMode,
   type TranslateResult,
 } from "../lib/aiTranslate";
-import { LanguagesIcon, XIcon } from "./Icons";
+import { ChevronDownIcon, LanguagesIcon, XIcon } from "./Icons";
 
 interface SelectionInfo {
   text: string;
@@ -68,8 +70,10 @@ export default function TranslatePopup({
 
   const [bubble, setBubble] = useState<SelectionInfo | null>(null);
   const [card, setCard] = useState<CardState | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   /** 快照式 state 的同步 ref：事件回调里读取最新值，避免闭包过期 */
   const cardRef = useRef<CardState | null>(null);
   cardRef.current = card;
@@ -81,6 +85,7 @@ export default function TranslatePopup({
     abortRef.current = null;
     setBubble(null);
     setCard(null);
+    setMenuOpen(false);
   }, []);
 
   // ---------- 发起翻译请求 ----------
@@ -117,6 +122,34 @@ export default function TranslatePopup({
     },
     [closeAll, lang, onOpenSettings]
   );
+
+  // ---------- 模型切换（结果卡片头部下拉） ----------
+
+  const config = loadAiConfig();
+  const activeProfile = getActiveProfile(config);
+
+  /** 切换选用档案并立即用新模型重新翻译 */
+  const switchModel = useCallback(
+    (id: string) => {
+      setMenuOpen(false);
+      const cfg = loadAiConfig();
+      if (cfg.activeId === id) return;
+      saveAiConfig({ ...cfg, activeId: id });
+      const cur = cardRef.current;
+      if (cur) runTranslate(cur.info, cur.mode);
+    },
+    [runTranslate]
+  );
+
+  // 下拉菜单点击外部关闭
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
 
   // ---------- 选区监听 ----------
 
@@ -195,6 +228,7 @@ export default function TranslatePopup({
     const d = card.errorDetail;
     if (d === "network") return t("aiErrorNetwork");
     if (d === "empty") return t("aiErrorEmpty");
+    if (d === "no-model") return t("aiErrorNoModel");
     if (d.startsWith("http:401") || d.startsWith("http:403")) return t("aiErrorAuth");
     if (d.startsWith("http:404")) return t("aiErrorNotFound");
     if (d.startsWith("http:429")) return t("aiErrorRateLimit");
@@ -249,6 +283,36 @@ export default function TranslatePopup({
                 {t("aiModeSentence")}
               </button>
             </div>
+            <div className="tr-spacer" />
+            {activeProfile && (
+              <div className="tr-chip-wrap" ref={menuRef}>
+                <button
+                  type="button"
+                  className="tr-model-chip"
+                  onClick={() => setMenuOpen((v) => !v)}
+                  title={t("aiSwitchModel")}
+                >
+                  <span>{activeProfile.name}</span>
+                  <ChevronDownIcon size={12} />
+                </button>
+                {menuOpen && (
+                  <div className="tr-model-menu" role="menu">
+                    {config.profiles.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`tr-model-menu-item ${p.id === activeProfile.id ? "is-active" : ""}`}
+                        role="menuitem"
+                        onClick={() => switchModel(p.id)}
+                      >
+                        <span className="tr-model-dot" aria-hidden="true" />
+                        <span className="tr-profile-name">{p.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               className="tr-close"

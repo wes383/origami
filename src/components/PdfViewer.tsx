@@ -135,6 +135,16 @@ export default function PdfViewer({
     };
   }, [effScale, onZoomStep, viewMode, currentPage, onCurrentPageChange]);
 
+  // 单页模式：翻页后回到页面顶部。
+  // wheel 翻页发生在旧页已滚到底部时，容器 scrollTop 保留旧值，
+  // 新页挂载后若不重置，会停留在新页的底部/中间位置。
+  useEffect(() => {
+    if (viewMode !== "single") return;
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+  }, [currentPage, viewMode]);
+
   // 缩放后恢复位置：Ctrl+滚轮走鼠标锚点；fit 倍率变化（窗口缩放等）锚定当前页顶部
   useLayoutEffect(() => {
     const el = containerRef.current;

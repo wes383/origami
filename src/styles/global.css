@@ -4,13 +4,15 @@
    ========================================================================== */
 
 :root {
-  /* 字体体系（对齐 Orkest：Inter 正文 / Manrope 标题 / JetBrains Mono 数字） */
-  --font-sans: "Inter Variable", "Noto Sans SC", "PingFang SC",
-    "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Manrope Variable", "Noto Sans SC", "PingFang SC",
-    "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", "Noto Sans SC", ui-monospace,
-    "SFMono-Regular", Menlo, monospace;
+  /* 字体体系（对齐 Orkest：Inter 正文 / Manrope 标题 / JetBrains Mono 数字；
+     CJK 统一回落到打包的思源黑体 Noto Sans SC——其 typo 度量对称，
+     字形严格垂直居中，避免落到微软雅黑导致中文偏下） */
+  --font-sans: "Inter Variable", "Noto Sans SC Variable", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope Variable", "Noto Sans SC Variable", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "Noto Sans SC Variable",
+    "Noto Sans SC", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   /* ── 颜色 tokens（浅色，对齐 orkest-ui lightTokens） ── */
   --background: #fcfbfa;
@@ -429,6 +431,7 @@ button:disabled {
   color: var(--foreground-muted);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   text-align: left;
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
@@ -482,10 +485,14 @@ button:disabled {
 
 .tb-dropdown-choice {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 30px;
   border-radius: var(--radius-full);
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   color: var(--foreground-muted);
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out),
@@ -795,6 +802,7 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1; /* Orkest 规范：单行文本统一 leading-none，配合 flex 居中 */
 }
 
 /** 列表项尾部操作（打开所在文件夹 / 移除） */
@@ -806,7 +814,7 @@ button:disabled {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm); /* 圆角矩形，与 modal 关闭按钮 hover 风格一致 */
   background: transparent;
   color: var(--foreground-faint);
   cursor: pointer;
@@ -1015,6 +1023,7 @@ button:disabled {
   z-index: 80;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   height: 30px;
   padding: 0 12px;
@@ -1023,6 +1032,7 @@ button:disabled {
   color: var(--accent-fg);
   font-size: 12.5px;
   font-weight: 550;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   box-shadow: var(--shadow-md);
   transform: translateX(-50%);
   animation: tr-pop var(--duration-fast) var(--ease-out);
@@ -1063,6 +1073,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px; /* 模型切换芯片与关闭按钮之间留出间距 */
   flex-shrink: 0;
   padding: 8px 8px 0 10px;
 }
@@ -1076,11 +1087,15 @@ button:disabled {
 }
 
 .tr-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 26px;
   padding: 0 12px;
   border-radius: var(--radius-full);
   font-size: 12px;
   font-weight: 500;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   color: var(--foreground-muted);
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
@@ -1102,7 +1117,7 @@ button:disabled {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm); /* 圆角矩形，与 modal 关闭按钮 hover 风格一致 */
   color: var(--foreground-subtle);
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
@@ -1147,6 +1162,9 @@ button:disabled {
 }
 
 .tr-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-top: 8px;
   height: 28px;
   padding: 0 14px;
@@ -1154,6 +1172,7 @@ button:disabled {
   border: 1px solid var(--border-strong);
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   color: var(--foreground);
   transition: background-color var(--duration-base) var(--ease-out);
 }
@@ -1216,6 +1235,9 @@ button:disabled {
 
 .tr-pos {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 34px;
   padding: 0 6px;
   border-radius: var(--radius-sm);
@@ -1223,7 +1245,7 @@ button:disabled {
   color: var(--foreground-muted);
   font-size: 11px;
   font-weight: 550;
-  text-align: center;
+  line-height: 1; /* Orkest 胶囊规范 */
   font-style: italic;
 }
 
@@ -1296,6 +1318,25 @@ button:disabled {
   font-weight: 650;
 }
 
+/* 右上角关闭按钮 */
+.tr-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  color: var(--foreground-subtle);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-modal-close:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
 .tr-form {
   display: flex;
   flex-direction: column;
@@ -1351,10 +1392,14 @@ button:disabled {
   right: 6px;
   top: 50%;
   transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 24px;
   padding: 0 8px;
   border-radius: var(--radius-sm);
   font-size: 11.5px;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   color: var(--foreground-subtle);
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
@@ -1386,23 +1431,28 @@ button:disabled {
   color: var(--red-fg);
 }
 
-.tr-modal-foot {
+/* 表单底部的操作行：测试连接 | 取消 | 添加/保存修改 */
+.tr-form-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 18px;
 }
 
-.tr-modal-foot-spacer {
+.tr-form-actions-spacer {
   flex: 1;
 }
 
 .tr-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 32px;
   padding: 0 14px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   color: var(--foreground-muted);
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
@@ -1414,6 +1464,9 @@ button:disabled {
 }
 
 .tr-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 32px;
   padding: 0 18px;
   border-radius: var(--radius-full);
@@ -1421,6 +1474,7 @@ button:disabled {
   color: var(--accent-fg);
   font-size: 12.5px;
   font-weight: 550;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   transition: background-color var(--duration-base) var(--ease-out);
 }
 
@@ -1430,4 +1484,230 @@ button:disabled {
 
 [data-theme="dark"] .tr-test-ok {
   color: #4ade80;
+}
+
+/* 多模型列表（设置弹窗内）：点击行选用，行尾删除 */
+.tr-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tr-model-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  transition: background-color var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
+}
+
+.tr-model-item.is-active {
+  border-color: var(--border-strong);
+  background: var(--accent-muted);
+}
+
+.tr-model-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+}
+
+.tr-model-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--foreground-faint);
+  transition: background-color var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
+}
+
+.tr-model-item.is-active .tr-model-dot {
+  border-color: var(--foreground);
+  background: var(--foreground);
+}
+
+.tr-model-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.tr-model-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 550;
+  line-height: 1;
+}
+
+.tr-model-remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--foreground-faint);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-model-remove:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+}
+
+/* 模型档案行：显示名 + 模型名（右对齐 mono） */
+.tr-profile-name {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+}
+
+.tr-profile-model {
+  flex-shrink: 0;
+  margin-left: auto;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--foreground-subtle);
+}
+
+/* 卡片头部布局：模式切换 | 弹性空隙 | 模型芯片 | 关闭 */
+.tr-spacer {
+  flex: 1;
+}
+
+/* 模型切换芯片 + 下拉菜单（结果卡片头部） */
+.tr-chip-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tr-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  max-width: 150px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--hover-bg);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--foreground-muted);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-model-chip:hover {
+  background: var(--hover-bg-strong);
+  color: var(--foreground);
+}
+
+.tr-model-chip > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tr-model-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 90;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: dropdown-in var(--duration-base) var(--ease-out);
+}
+
+.tr-model-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--foreground);
+  text-align: left;
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.tr-model-menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.tr-model-menu-item.is-active .tr-model-dot {
+  border-color: var(--foreground);
+  background: var(--foreground);
+}
+
+.tr-model-menu-item .tr-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 添加/编辑模型表单区：标题 + 带标签字段组 */
+.tr-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-60);
+}
+
+.tr-form-title {
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--foreground-faint);
+}
+
+/* 「添加模型」展开按钮：靠左，图标 + 文字间距 */
+.tr-add-model {
+  align-self: flex-start;
+  gap: 6px;
 }

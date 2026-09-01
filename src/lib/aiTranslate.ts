@@ -1,32 +1,111 @@
 /**
  * AI 划词/划句翻译 — OpenAI 兼容 Chat Completions 客户端。
  *
- * 配置（baseUrl / apiKey / model）持久化在 localStorage，仅供前端直接
+ * 支持保存多个「模型档案」（厂商各自的 Base URL / API Key / 模型名），
+ * 随时切换当前使用的档案。配置持久化在 localStorage，仅供前端直接
  * fetch 调用，不上传到任何第三方。CSP 为 null（tauri.conf.json），
  * webview 内可直接请求外部 HTTPS 接口。
  */
 
 const STORAGE_KEY = "pdfreader-ai-config";
 
-export interface AiConfig {
+/** 一个模型档案 = 一个厂商端点 + 模型 */
+export interface AiProfile {
+  id: string;
+  /** 显示名，默认取模型名 */
+  name: string;
   baseUrl: string;
   apiKey: string;
   model: string;
 }
 
+export interface AiConfig {
+  profiles: AiProfile[];
+  /** 当前选用的档案 id（始终指向 profiles 中的一项） */
+  activeId: string;
+}
+
+function genId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `p-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+function sanitizeProfiles(raw: unknown): AiProfile[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as unknown[])
+    .map((p): AiProfile | null => {
+      if (!p || typeof p !== "object") return null;
+      const o = p as Record<string, unknown>;
+      const baseUrl = typeof o.baseUrl === "string" ? o.baseUrl : "";
+      const apiKey = typeof o.apiKey === "string" ? o.apiKey : "";
+      const model = typeof o.model === "string" ? o.model.trim() : "";
+      if (!baseUrl || !model) return null;
+      const name =
+        typeof o.name === "string" && o.name.trim() ? o.name.trim() : model;
+      return {
+        id: typeof o.id === "string" && o.id ? o.id : genId(),
+        name,
+        baseUrl,
+        apiKey,
+        model,
+      };
+    })
+    .filter((p): p is AiProfile => p !== null);
+}
+
 export function loadAiConfig(): AiConfig {
-  const fallback: AiConfig = { baseUrl: "", apiKey: "", model: "" };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<AiConfig>;
-    return {
-      baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
-      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
-      model: typeof parsed.model === "string" ? parsed.model : "",
-    };
+    if (!raw) return { profiles: [], activeId: "" };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    let profiles: AiProfile[] = [];
+    if (Array.isArray(parsed.profiles)) {
+      // 当前格式：档案列表
+      profiles = sanitizeProfiles(parsed.profiles);
+    } else if (Array.isArray(parsed.models)) {
+      // 上一版：单 endpoint + 多模型名 → 每个模型名升格为一个档案
+      const baseUrl = typeof parsed.baseUrl === "string" ? parsed.baseUrl : "";
+      const apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey : "";
+      const activeModel =
+        typeof parsed.activeModel === "string" ? parsed.activeModel : "";
+      profiles = (parsed.models as unknown[])
+        .filter((m): m is string => typeof m === "string" && m.trim() !== "")
+        .map((m) => ({
+          id: genId(),
+          name: m.trim(),
+          baseUrl,
+          apiKey,
+          model: m.trim(),
+        }));
+      const hit = profiles.find((p) => p.model === activeModel);
+      return {
+        profiles,
+        activeId: hit?.id ?? profiles[0]?.id ?? "",
+      };
+    } else if (typeof parsed.model === "string" && parsed.model.trim()) {
+      // 最初版：单 endpoint + 单模型
+      profiles = [
+        {
+          id: genId(),
+          name: parsed.model.trim(),
+          baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
+          apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+          model: parsed.model.trim(),
+        },
+      ];
+    }
+
+    let activeId = typeof parsed.activeId === "string" ? parsed.activeId : "";
+    if (!profiles.some((p) => p.id === activeId)) {
+      activeId = profiles[0]?.id ?? "";
+    }
+    return { profiles, activeId };
   } catch {
-    return fallback;
+    return { profiles: [], activeId: "" };
   }
 }
 
@@ -38,8 +117,13 @@ export function saveAiConfig(config: AiConfig): void {
   }
 }
 
+export function getActiveProfile(config: AiConfig): AiProfile | null {
+  return config.profiles.find((p) => p.id === config.activeId) ?? null;
+}
+
 export function isAiConfigured(config: AiConfig): boolean {
-  return config.baseUrl.trim() !== "" && config.apiKey.trim() !== "";
+  const p = getActiveProfile(config);
+  return p !== null && p.baseUrl.trim() !== "" && p.apiKey.trim() !== "";
 }
 
 // ---------- 词语 / 句子判定 ----------
@@ -165,6 +249,13 @@ function pickString(obj: Record<string, unknown>, key: string): string | undefin
   return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
 }
 
+/** 一次请求的端点信息（取自当前选用的档案） */
+interface ChatEndpoint {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
 interface ChatMessage {
   role: "system" | "user";
   content: string;
@@ -172,25 +263,26 @@ interface ChatMessage {
 
 /** 调用 OpenAI 兼容接口，返回原始文本 */
 async function chatCompletion(
-  config: AiConfig,
+  endpoint: ChatEndpoint,
   messages: ChatMessage[],
   signal?: AbortSignal
 ): Promise<string> {
-  const base = config.baseUrl.trim().replace(/\/+$/, "");
+  const base = endpoint.baseUrl.trim().replace(/\/+$/, "");
   const url = /\/chat\/completions$/.test(base)
     ? base
     : `${base}/chat/completions`;
 
+  if (!endpoint.model.trim()) throw new AiRequestError("no-model");
   let resp: Response;
   try {
     resp = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey.trim()}`,
+        Authorization: `Bearer ${endpoint.apiKey.trim()}`,
       },
       body: JSON.stringify({
-        model: config.model.trim(),
+        model: endpoint.model.trim(),
         messages,
         temperature: 0.3,
         stream: false,
@@ -256,8 +348,11 @@ export async function translateSelection(
       ? `Selected text: "${text}"${contextBlock}`
       : `Selected text:\n"""\n${text}\n"""${contextBlock}`;
 
+  const profile = getActiveProfile(config);
+  if (!profile) throw new AiRequestError("no-model");
+
   const raw = await chatCompletion(
-    config,
+    profile,
     [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -300,11 +395,11 @@ export async function translateSelection(
 
 /** 设置弹窗「测试连接」：发送一条最小请求验证配置可用 */
 export async function testAiConnection(
-  config: AiConfig,
+  profile: AiProfile,
   signal?: AbortSignal
 ): Promise<void> {
   await chatCompletion(
-    config,
+    profile,
     [
       { role: "system", content: "You are a connectivity probe." },
       { role: "user", content: 'Reply with exactly: OK' },

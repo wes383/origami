@@ -182,3 +182,22 @@ export function LanguagesIcon({ size = 16 }: IconProps) {
     </svg>
   );
 }
+
+/** 下拉箭头（lucide chevron-down） */
+export function ChevronDownIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+/** 编辑（lucide pencil） */
+export function PencilIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M21.17 6.83a2.83 2.83 0 0 0-4-4L3.84 16.17a2 2 0 0 0-.5.83L2 22l5-1.34a2 2 0 0 0 .83-.5z" />
+      <path d="m15 5 4 4" />
+    </svg>
+  );
+}
