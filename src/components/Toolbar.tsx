@@ -276,7 +276,12 @@ export default function Toolbar({
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      // 语言二级菜单 portal 到 body（不在 menuRef 内），点击其内部不应关闭主菜单
+      if (
+        !menuRef.current?.contains(e.target as Node) &&
+        !langMenuDomRef.current?.contains(e.target as Node)
+      )
+        setMenuOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
