@@ -125,13 +125,14 @@ export const de: Record<LangKeys, string> = {
   tocNoMatch: "Keine passenden Einträge",
   // Tastenkürzel
   shortcutsTitle: "Tastenkürzel",
-  shortcutSidebar: "Seitenleiste umschalten",
+  shortcutSidebar: "Inhaltsverzeichnis-Seitenleiste umschalten",
+  shortcutTranslateSidebar: "Übersetzungs-Seitenleiste umschalten",
   shortcutZoomReset: "Zoom zurücksetzen (100 %)",
   shortcutFit: "Breite / Seite umschalten",
   shortcutWikipedia: "In Wikipedia suchen",
   shortcutHelp: "Diese Hilfe anzeigen",
   shortcutSelectionHint: "Nach Textauswahl",
-  aiSidebar: "KI-Seitenleiste",
+  aiSidebar: "Übersetzungs-Seitenleiste",
   panelEmptyTranslate: "Wählen Sie PDF-Text aus, um die KI-Übersetzung hier zu sehen",
   panelEmptyWikipedia: "Wählen Sie PDF-Text aus, um Wikipedia hier zu öffnen",
 };

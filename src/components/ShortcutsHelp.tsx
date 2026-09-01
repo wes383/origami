@@ -18,6 +18,7 @@ const ROWS: Row[] = [
   { keys: "Ctrl + P", descKey: "print" },
   { keys: "Ctrl + F", descKey: "search" },
   { keys: "Ctrl + \\", descKey: "shortcutSidebar" },
+  { keys: "Ctrl + T", descKey: "shortcutTranslateSidebar" },
   { keys: "Ctrl + +", descKey: "zoomIn" },
   { keys: "Ctrl + -", descKey: "zoomOut" },
   { keys: "Ctrl + 0", descKey: "shortcutZoomReset" },

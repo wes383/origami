@@ -15,11 +15,12 @@
  * 浮动气泡则隐藏掉那个已「分流」走的按钮（见 TranslatePopup）。
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "../i18n";
 import {
   describeAiError,
+  detectMode,
   isAiConfigured,
   loadAiConfig,
   loadTargetLang,
@@ -91,6 +92,8 @@ export function useTextActionEngine({
   panelCardRef.current = panelCard;
   floatingWikiRef.current = floatingWiki;
   panelWikiRef.current = panelWiki;
+  /** 最近一次翻译 / 查询所用选区：切 tab 时据此自动拉取目标 tab 的结果 */
+  const lastSelectionRef = useRef<SelectionInfo | null>(null);
 
   /** 依据右侧面板状态推断结果落点（可被显式 route 覆盖） */
   const routeTarget = useCallback(
@@ -131,6 +134,7 @@ export function useTextActionEngine({
       mode: TranslateMode,
       route?: RouteLoc
     ) => {
+      lastSelectionRef.current = info;
       const loc = route ?? routeTarget("translate");
       abortRef.current?.abort();
       const config = loadAiConfig();
@@ -190,6 +194,7 @@ export function useTextActionEngine({
 
   const runWiki = useCallback(
     (info: SelectionInfo, route?: RouteLoc) => {
+      lastSelectionRef.current = info;
       const loc = route ?? routeTarget("wiki");
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -287,6 +292,33 @@ export function useTextActionEngine({
     setFloatingCard(null);
     setFloatingWiki(null);
   }, []);
+
+  /**
+   * 切换面板 tab 时，若当前有已记录的选区、且目标 tab 尚无对应结果（或与当前
+   * 选区不一致），则自动用该选区拉取目标 tab 的内容。实现预期行为：在翻译 tab
+   * 选中文本后切到 Wikipedia tab，即对已选文本直接查词并展示，无需重新划词。
+   * 仅在 tab 真正切换时触发（打开/关闭面板、同 tab 不触发）。
+   */
+  const prevTabRef = useRef(rightPanel.tab);
+  useEffect(() => {
+    const prev = prevTabRef.current;
+    prevTabRef.current = rightPanel.tab;
+    if (!rightPanel.open) return;
+    if (prev === rightPanel.tab) return; // 仅在该 tab 真正切换时触发
+    const info = lastSelectionRef.current;
+    if (!info) return;
+    if (rightPanel.tab === "translate") {
+      const cur = panelCardRef.current;
+      if (!cur || cur.info.text !== info.text) {
+        runTranslate(info, detectMode(info.text), "panel");
+      }
+    } else {
+      const cur = panelWikiRef.current;
+      if (!cur || cur.info.text !== info.text) {
+        runWiki(info, "panel");
+      }
+    }
+  }, [rightPanel.tab, rightPanel.open, runTranslate, runWiki]);
 
   return {
     floatingCard,

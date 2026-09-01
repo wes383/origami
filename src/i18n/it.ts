@@ -125,13 +125,14 @@ export const it: Record<LangKeys, string> = {
   tocNoMatch: "Nessuna voce corrispondente",
   // Scorciatoie da tastiera
   shortcutsTitle: "Scorciatoie da tastiera",
-  shortcutSidebar: "Mostra/nascondi pannello",
+  shortcutSidebar: "Mostra/nascondi pannello indice",
+  shortcutTranslateSidebar: "Mostra/nascondi pannello di traduzione",
   shortcutZoomReset: "Reimposta zoom (100 %)",
   shortcutFit: "Alterna adatta a larghezza / pagina",
   shortcutWikipedia: "Cerca su Wikipedia",
   shortcutHelp: "Mostra questa guida",
   shortcutSelectionHint: "Dopo aver selezionato il testo",
-  aiSidebar: "Pannello IA",
+  aiSidebar: "Pannello di traduzione",
   panelEmptyTranslate: "Seleziona il testo del PDF per vedere qui la traduzione IA",
   panelEmptyWikipedia: "Seleziona il testo del PDF per consultare Wikipedia qui",
 };

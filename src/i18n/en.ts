@@ -125,13 +125,14 @@ export const en: Record<LangKeys, string> = {
   tocNoMatch: "No matching entries",
   // Keyboard shortcuts
   shortcutsTitle: "Keyboard Shortcuts",
-  shortcutSidebar: "Toggle sidebar",
+  shortcutSidebar: "Toggle outline sidebar",
+  shortcutTranslateSidebar: "Toggle translate sidebar",
   shortcutZoomReset: "Reset zoom (100%)",
   shortcutFit: "Toggle fit width / page",
   shortcutWikipedia: "Search Wikipedia",
   shortcutHelp: "Show this help",
   shortcutSelectionHint: "After selecting text",
-  aiSidebar: "AI Sidebar",
+  aiSidebar: "Translate Sidebar",
   panelEmptyTranslate: "Select PDF text to see the AI translation here",
   panelEmptyWikipedia: "Select PDF text to look up Wikipedia here",
 };

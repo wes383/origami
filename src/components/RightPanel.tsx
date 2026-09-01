@@ -9,7 +9,7 @@
  */
 
 import { useI18n } from "../i18n";
-import { LanguagesIcon, GlobeIcon, XIcon } from "./Icons";
+import { XIcon } from "./Icons";
 import { TranslateCardView, WikiCardView } from "./TranslateCards";
 import type { RightTab, TextActionEngine } from "../hooks/useTextActionEngine";
 
@@ -32,32 +32,30 @@ export default function RightPanel({
 
   return (
     <aside className="right-panel">
-      <div className="right-head">
-        <div className="right-tabs" role="tablist">
+      <div className="sidebar-head">
+        <div className="sidebar-tabs" role="tablist">
           <button
             type="button"
             role="tab"
             aria-selected={tab === "translate"}
-            className={`right-tab ${tab === "translate" ? "is-active" : ""}`}
+            className={`sidebar-tab ${tab === "translate" ? "is-active" : ""}`}
             onClick={() => onTabChange("translate")}
           >
-            <LanguagesIcon size={13} />
-            <span>{t("aiTranslate")}</span>
+            {t("aiTranslate")}
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={tab === "wikipedia"}
-            className={`right-tab ${tab === "wikipedia" ? "is-active" : ""}`}
+            className={`sidebar-tab ${tab === "wikipedia" ? "is-active" : ""}`}
             onClick={() => onTabChange("wikipedia")}
           >
-            <GlobeIcon size={13} />
-            <span>Wikipedia</span>
+            Wikipedia
           </button>
         </div>
         <button
           type="button"
-          className="right-close"
+          className="sidebar-close"
           onClick={onClose}
           title={t("aiClose")}
           aria-label={t("aiClose")}

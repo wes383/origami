@@ -125,13 +125,14 @@ export const es: Record<LangKeys, string> = {
   tocNoMatch: "No hay entradas coincidentes",
   // Atajos de teclado
   shortcutsTitle: "Atajos de teclado",
-  shortcutSidebar: "Mostrar/ocultar panel",
+  shortcutSidebar: "Mostrar/ocultar panel de índice",
+  shortcutTranslateSidebar: "Mostrar/ocultar panel de traducción",
   shortcutZoomReset: "Restablecer zoom (100 %)",
   shortcutFit: "Alternar ajuste ancho / página",
   shortcutWikipedia: "Buscar en Wikipedia",
   shortcutHelp: "Mostrar esta ayuda",
   shortcutSelectionHint: "Tras seleccionar texto",
-  aiSidebar: "Panel de IA",
+  aiSidebar: "Panel de traducción",
   panelEmptyTranslate: "Selecciona texto del PDF para ver la traducción de IA aquí",
   panelEmptyWikipedia: "Selecciona texto del PDF para consultar Wikipedia aquí",
 };

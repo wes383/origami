@@ -125,13 +125,14 @@ export const zh = {
   tocNoMatch: "未找到匹配的目录项",
   // 快捷键
   shortcutsTitle: "快捷键",
-  shortcutSidebar: "切换侧边栏",
+  shortcutSidebar: "切换目录侧边栏",
+  shortcutTranslateSidebar: "切换翻译侧边栏",
   shortcutZoomReset: "重置缩放（100%）",
   shortcutFit: "切换适应宽度 / 页面",
   shortcutWikipedia: "Wikipedia 搜索",
   shortcutHelp: "显示本帮助",
   shortcutSelectionHint: "选中文本后可用",
-  aiSidebar: "AI 侧边栏",
+  aiSidebar: "翻译侧边栏",
   panelEmptyTranslate: "选中 PDF 文本后，在此查看 AI 翻译结果",
   panelEmptyWikipedia: "选中 PDF 文本后，在此查看 Wikipedia 解释",
 };

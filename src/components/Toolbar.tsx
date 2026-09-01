@@ -891,17 +891,6 @@ export default function Toolbar({
             >
               <SearchIcon />
             </button>
-            <span className="tb-separator" aria-hidden="true" />
-            <button
-              type="button"
-              className={`tb-btn icon-only ${rightPanelOpen ? "is-active" : ""}`}
-              onClick={onToggleRightPanel}
-              title={t("aiSidebar")}
-              aria-label={t("aiSidebar")}
-              aria-pressed={rightPanelOpen}
-            >
-              <LanguagesIcon />
-            </button>
           </>
         )}
       </div>

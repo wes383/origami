@@ -125,13 +125,14 @@ export const fr: Record<LangKeys, string> = {
   tocNoMatch: "Aucune entrée correspondante",
   // Raccourcis clavier
   shortcutsTitle: "Raccourcis clavier",
-  shortcutSidebar: "Afficher/masquer le sommaire",
+  shortcutSidebar: "Afficher/masquer la barre latérale du sommaire",
+  shortcutTranslateSidebar: "Afficher/masquer le panneau de traduction",
   shortcutZoomReset: "Réinitialiser le zoom (100 %)",
   shortcutFit: "Basculer largeur / page",
   shortcutWikipedia: "Rechercher sur Wikipédia",
   shortcutHelp: "Afficher cette aide",
   shortcutSelectionHint: "Après avoir sélectionné du texte",
-  aiSidebar: "Panneau IA",
+  aiSidebar: "Panneau de traduction",
   panelEmptyTranslate: "Sélectionnez du texte PDF pour voir la traduction IA ici",
   panelEmptyWikipedia: "Sélectionnez du texte PDF pour consulter Wikipedia ici",
 };

@@ -748,6 +748,10 @@ export default function App() {
             setSidebarOpen(true);
             saveSidebarPref(true);
           }
+        } else if (key === "t") {
+          // 翻译侧边栏开关（T = Translate）
+          e.preventDefault();
+          setRightOpen((v) => !v);
         }
         return;
       }

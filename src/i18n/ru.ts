@@ -125,13 +125,14 @@ export const ru: Record<LangKeys, string> = {
   tocNoMatch: "Подходящих разделов не найдено",
   // Горячие клавиши
   shortcutsTitle: "Горячие клавиши",
-  shortcutSidebar: "Показать/скрыть панель",
+  shortcutSidebar: "Показать/скрыть панель оглавления",
+  shortcutTranslateSidebar: "Показать/скрыть панель перевода",
   shortcutZoomReset: "Сбросить масштаб (100 %)",
   shortcutFit: "Переключить по ширине / по странице",
   shortcutWikipedia: "Искать в Википедии",
   shortcutHelp: "Показать эту справку",
   shortcutSelectionHint: "После выделения текста",
-  aiSidebar: "Боковая панель ИИ",
+  aiSidebar: "Панель перевода",
   panelEmptyTranslate: "Выделите текст PDF, чтобы увидеть здесь ИИ-перевод",
   panelEmptyWikipedia: "Выделите текст PDF, чтобы открыть здесь Wikipedia",
 };

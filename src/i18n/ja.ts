@@ -125,13 +125,14 @@ export const ja: Record<LangKeys, string> = {
   tocNoMatch: "一致する項目がありません",
   // キーボードショートカット
   shortcutsTitle: "キーボードショートカット",
-  shortcutSidebar: "サイドバーの表示切替",
+  shortcutSidebar: "目次サイドバーの表示切替",
+  shortcutTranslateSidebar: "翻訳サイドバーの表示切替",
   shortcutZoomReset: "ズームをリセット（100%）",
   shortcutFit: "幅 / ページへの表示を切替",
   shortcutWikipedia: "Wikipedia で検索",
   shortcutHelp: "このヘルプを表示",
   shortcutSelectionHint: "テキストを選択後",
-  aiSidebar: "AI サイドバー",
+  aiSidebar: "翻訳サイドバー",
   panelEmptyTranslate: "PDF テキストを選択すると、AI 翻訳がここに表示されます",
   panelEmptyWikipedia: "PDF テキストを選択すると、Wikipedia の説明がここに表示されます",
 };

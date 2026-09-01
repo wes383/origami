@@ -646,6 +646,13 @@ button:disabled {
   padding-top: var(--toolbar-h);
 }
 
+/* 右侧 AI 面板同样预留工具栏高度：全屏下工具栏悬浮盖 y 0~52，
+   若不预留，右侧 tab 区会落在 y 0~40 被工具栏遮挡，且触发与左侧同样的
+   唤醒/隐藏死循环。预留后 tab 下移到 y ≥ 52，与左侧边栏顶部位置一致。 */
+.fs-on .right-panel {
+  padding-top: var(--toolbar-h);
+}
+
 /* 全屏唤醒探针条（Toolbar.tsx 全屏且未固定时渲染，紧跟 header 之后）：
    屏幕顶部 fixed 透明热区，高度覆盖整个工具栏区域（var(--toolbar-h)），
    独立于工具栏本体（工具栏隐藏时整体移出屏幕外）。
@@ -1888,64 +1895,9 @@ button:disabled {
   }
 }
 
-.right-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 12px 10px 8px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.right-tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-md);
-  background: var(--hover-bg);
-}
-
-.right-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: calc(var(--radius-md) - 2px);
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
-  color: var(--foreground-muted);
-  transition: background-color var(--duration-base) var(--ease-out),
-    color var(--duration-base) var(--ease-out);
-}
-
-.right-tab:hover {
-  color: var(--foreground);
-}
-
-.right-tab.is-active {
-  background: var(--surface);
-  color: var(--foreground);
-  box-shadow: var(--shadow-xs);
-}
-
-.right-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  color: var(--foreground-subtle);
-  transition: background-color var(--duration-base) var(--ease-out),
-    color var(--duration-base) var(--ease-out);
-}
-
-.right-close:hover {
-  background: var(--hover-bg);
-  color: var(--foreground);
-}
+/* 右侧面板的头部（tab 切换 + 关闭按钮）直接复用左侧边栏的
+   .sidebar-head / .sidebar-tabs / .sidebar-tab / .sidebar-close，
+   保证两侧视觉完全一致（tab 纯文字、无 icon）。 */
 
 .right-body {
   flex: 1;

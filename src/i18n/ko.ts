@@ -125,13 +125,14 @@ export const ko: Record<LangKeys, string> = {
   tocNoMatch: "일치하는 항목 없음",
   // 키보드 단축키
   shortcutsTitle: "키보드 단축키",
-  shortcutSidebar: "사이드바 켜기/끄기",
+  shortcutSidebar: "목차 사이드바 켜기/끄기",
+  shortcutTranslateSidebar: "번역 사이드바 켜기/끄기",
   shortcutZoomReset: "확대 초기화 (100%)",
   shortcutFit: "맞춤 너비 / 페이지 전환",
   shortcutWikipedia: "Wikipedia 검색",
   shortcutHelp: "이 도움말 표시",
   shortcutSelectionHint: "텍스트 선택 후 사용",
-  aiSidebar: "AI 사이드바",
+  aiSidebar: "번역 사이드바",
   panelEmptyTranslate: "PDF 텍스트를 선택하면 AI 번역이 여기에 표시됩니다",
   panelEmptyWikipedia: "PDF 텍스트를 선택하면 Wikipedia 설명이 여기에 표시됩니다",
 };
