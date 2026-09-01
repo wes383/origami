@@ -2,9 +2,11 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
 } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { SearchMatch } from "../lib/search";
 import PdfPage from "./PdfPage";
 import { useVisiblePages } from "../hooks/useVisiblePages";
 
@@ -30,6 +32,14 @@ interface PdfViewerProps {
   onHeightChange: (height: number) => void;
   /** 首页基础尺寸（scale=1） */
   basePage: { w: number; h: number };
+  /** 全文查找结果（用于各页高亮） */
+  searchMatches: SearchMatch[];
+  /** 当前选中的匹配 id（强调样式） */
+  activeMatchId: string | null;
+  /** 需滚动定位到视口中心的匹配 id（匹配项切换时设置） */
+  focusMatchId: string | null;
+  /** 定位处理完毕后清空意图 */
+  onFocusHandled: () => void;
 }
 
 export default function PdfViewer({
@@ -45,6 +55,10 @@ export default function PdfViewer({
   onWidthChange,
   onHeightChange,
   basePage,
+  searchMatches,
+  activeMatchId,
+  focusMatchId,
+  onFocusHandled,
 }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   /** 缩放锚点：保持鼠标指向的内容点不动 */
@@ -245,6 +259,39 @@ export default function PdfViewer({
   const pw = basePage.w * effScale;
   const ph = basePage.h * effScale;
 
+  // 各页匹配（含矩形），供 PdfPage 高亮
+  const matchesByPage = useMemo(() => {
+    const map = new Map<number, SearchMatch[]>();
+    for (const m of searchMatches) {
+      const list = map.get(m.page);
+      if (list) list.push(m);
+      else map.set(m.page, [m]);
+    }
+    return map;
+  }, [searchMatches]);
+
+  // 匹配项定位：等待页跳转意图清空后（避免与滚动动画互相抢占），
+  // 将当前匹配滚动到视口中心。单页模式换页后 DOM 稍晚挂载，用 rAF 轮询兜底
+  useEffect(() => {
+    if (!focusMatchId || jumpTarget != null) return;
+    let raf = 0;
+    let tries = 0;
+    const tryScroll = () => {
+      const el = containerRef.current?.querySelector(
+        `[data-hl="${focusMatchId}"]`
+      );
+      if (el) {
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+        onFocusHandled();
+        return;
+      }
+      if (tries++ < 90) raf = requestAnimationFrame(tryScroll);
+      else onFocusHandled(); // 约 1.5s 后放弃，避免意图残留
+    };
+    raf = requestAnimationFrame(tryScroll);
+    return () => cancelAnimationFrame(raf);
+  }, [focusMatchId, jumpTarget, onFocusHandled]);
+
   return (
     <div
       ref={containerRef}
@@ -266,6 +313,8 @@ export default function PdfViewer({
                 estimatedW={pw}
                 estimatedH={ph}
                 visible={visiblePages.has(i + 1)}
+                highlights={matchesByPage.get(i + 1)?.flatMap((m) => m.rects) ?? []}
+                activeHighlightId={activeMatchId}
               />
             </div>
           ))
@@ -279,6 +328,8 @@ export default function PdfViewer({
               estimatedW={pw}
               estimatedH={ph}
               visible
+              highlights={matchesByPage.get(currentPage)?.flatMap((m) => m.rects) ?? []}
+              activeHighlightId={activeMatchId}
             />
           </div>
         )}

@@ -32,6 +32,11 @@ export const pt: Record<LangKeys, string> = {
   toc: "Sumário",
   tocClose: "Fechar o sumário",
   thumbnails: "Miniaturas",
+  search: "Buscar",
+  searchPlaceholder: "Buscar texto…",
+  searchPrev: "Resultado anterior",
+  searchNext: "Próximo resultado",
+  searchClose: "Fechar busca",
   // Tradução por seleção com IA
   aiSettings: "Configurações de tradução com IA",
   aiTranslate: "Traduzir com IA",

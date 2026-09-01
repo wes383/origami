@@ -5,6 +5,7 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { OpenedPdf, OutlineNode } from "./lib/pdf";
 import { openPdf, loadOutline } from "./lib/pdf";
+import type { SearchMatch } from "./lib/search";
 import { useI18n, type LangKeys } from "./i18n";
 import { useTheme } from "./hooks/useTheme";
 import {
@@ -16,6 +17,7 @@ import {
 import Toolbar from "./components/Toolbar";
 import PdfViewer, { type ViewMode } from "./components/PdfViewer";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
+import SearchBar from "./components/SearchBar";
 import TranslatePopup from "./components/TranslatePopup";
 import AiSettingsModal from "./components/AiSettingsModal";
 import EmptyState from "./components/EmptyState";
@@ -72,6 +74,11 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** 侧边栏当前标签页（目录 / 缩略图） */
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
+  /** 全文查找 */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([]);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [focusMatchId, setFocusMatchId] = useState<string | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -127,6 +134,10 @@ export default function App() {
       // 含目录的文档默认展开侧边栏（目录页签），便于导航
       setSidebarTab("outline");
       setSidebarOpen(parsedOutline.length > 0);
+      // 新文档：清空上一个文档的查找结果
+      setSearchMatches([]);
+      setActiveMatchId(null);
+      setFocusMatchId(null);
     } catch {
       setErrorKey("errorInvalid");
     } finally {
@@ -162,6 +173,10 @@ export default function App() {
     setOutline([]);
     setSidebarOpen(false);
     setSidebarTab("outline");
+    setSearchOpen(false);
+    setSearchMatches([]);
+    setActiveMatchId(null);
+    setFocusMatchId(null);
   }, []);
 
   // ---------- 禁用右键菜单（阅读器场景） ----------
@@ -308,6 +323,46 @@ export default function App() {
   );
 
   const handleJumpHandled = useCallback(() => setJumpTarget(null), []);
+  const handleFocusHandled = useCallback(() => setFocusMatchId(null), []);
+
+  // ---------- 全文查找 ----------
+
+  /** 关闭查找并清空所有高亮 */
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchMatches([]);
+    setActiveMatchId(null);
+    setFocusMatchId(null);
+  }, []);
+
+  /**
+   * 选中匹配变化：设置激活高亮并滚动定位。
+   * 单页模式还需切换当前页；连续模式交由 scrollIntoView 滚动，
+   * 观察器随后跟随滚动更新页码（避免与页跳转动画互相抢占）
+   */
+  const handleActiveMatchChange = useCallback(
+    (match: SearchMatch | null) => {
+      setActiveMatchId(match?.id ?? null);
+      setFocusMatchId(match?.id ?? null);
+      if (match && viewMode === "single" && match.page !== currentPage) {
+        goToPage(match.page);
+      }
+    },
+    [viewMode, currentPage, goToPage]
+  );
+
+  /** Ctrl+F 打开查找（存在文档时） */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        if (!pdf) return;
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pdf]);
 
   // ---------- 键盘（单页模式翻页；连续模式走原生滚动） ----------
 
@@ -363,6 +418,7 @@ export default function App() {
         onOpen={handleOpenDialog}
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
+        onOpenSearch={() => setSearchOpen(true)}
         outlineAvailable={outline.length > 0}
         sidebarOpen={sidebarOpen}
         sidebarTab={sidebarTab}
@@ -393,6 +449,14 @@ export default function App() {
               />
             )}
             <div className="reader-main">
+              {searchOpen && (
+                <SearchBar
+                  doc={pdf.doc}
+                  onMatchesChange={setSearchMatches}
+                  onActiveChange={handleActiveMatchChange}
+                  onClose={closeSearch}
+                />
+              )}
               <PdfViewer
                 key={`${fileName}-${viewMode === "single" ? "s" : "c"}`}
                 doc={pdf.doc}
@@ -407,6 +471,10 @@ export default function App() {
                 onWidthChange={setContainerWidth}
                 onHeightChange={setContainerHeight}
                 basePage={basePage}
+                searchMatches={searchMatches}
+                activeMatchId={activeMatchId}
+                focusMatchId={focusMatchId}
+                onFocusHandled={handleFocusHandled}
               />
             </div>
           </div>

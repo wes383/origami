@@ -16,6 +16,25 @@ function base(size: number) {
   };
 }
 
+/** 查找（lucide search） */
+export function SearchIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+/** 上箭头（lucide chevron-up） */
+export function ChevronUpIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="m6 15 6-6 6 6" />
+    </svg>
+  );
+}
+
 /** 打开所在文件夹（lucide folder） */
 export function FolderSearchIcon({ size = 16 }: IconProps) {
   return (

@@ -32,6 +32,11 @@ export const ko: Record<LangKeys, string> = {
   toc: "목차",
   tocClose: "목차 닫기",
   thumbnails: "페이지 미리보기",
+  search: "찾기",
+  searchPlaceholder: "텍스트 찾기…",
+  searchPrev: "이전 결과",
+  searchNext: "다음 결과",
+  searchClose: "찾기 닫기",
   // AI 선택 번역
   aiSettings: "AI 번역 설정",
   aiTranslate: "AI 번역",

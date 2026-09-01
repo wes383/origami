@@ -32,6 +32,11 @@ export const es: Record<LangKeys, string> = {
   toc: "Índice",
   tocClose: "Cerrar el índice",
   thumbnails: "Miniaturas",
+  search: "Buscar",
+  searchPlaceholder: "Buscar texto…",
+  searchPrev: "Resultado anterior",
+  searchNext: "Resultado siguiente",
+  searchClose: "Cerrar búsqueda",
   // Traducción de selección con IA
   aiSettings: "Ajustes de traducción con IA",
   aiTranslate: "Traducir con IA",

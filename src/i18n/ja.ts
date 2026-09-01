@@ -32,6 +32,11 @@ export const ja: Record<LangKeys, string> = {
   toc: "目次",
   tocClose: "目次を閉じる",
   thumbnails: "ページサムネイル",
+  search: "検索",
+  searchPlaceholder: "テキストを検索…",
+  searchPrev: "前の結果",
+  searchNext: "次の結果",
+  searchClose: "検索を閉じる",
   // AI 選択翻訳
   aiSettings: "AI 翻訳設定",
   aiTranslate: "AI 翻訳",

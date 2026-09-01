@@ -32,6 +32,11 @@ export const en: Record<LangKeys, string> = {
   toc: "Contents",
   tocClose: "Close Table of Contents",
   thumbnails: "Thumbnails",
+  search: "Find",
+  searchPlaceholder: "Find in document…",
+  searchPrev: "Previous match",
+  searchNext: "Next match",
+  searchClose: "Close find",
   // AI selection translate
   aiSettings: "AI Translation Settings",
   aiTranslate: "AI Translate",

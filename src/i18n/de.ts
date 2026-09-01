@@ -32,6 +32,11 @@ export const de: Record<LangKeys, string> = {
   toc: "Inhalt",
   tocClose: "Inhaltsverzeichnis schließen",
   thumbnails: "Miniaturen",
+  search: "Suchen",
+  searchPlaceholder: "Text suchen…",
+  searchPrev: "Vorheriges Ergebnis",
+  searchNext: "Nächstes Ergebnis",
+  searchClose: "Suche schließen",
   // KI-Auswahlübersetzung
   aiSettings: "KI-Übersetzungseinstellungen",
   aiTranslate: "KI-Übersetzen",

@@ -32,6 +32,11 @@ export const ru: Record<LangKeys, string> = {
   toc: "Содержание",
   tocClose: "Закрыть содержание",
   thumbnails: "Миниатюры",
+  search: "Поиск",
+  searchPlaceholder: "Найти текст…",
+  searchPrev: "Предыдущий результат",
+  searchNext: "Следующий результат",
+  searchClose: "Закрыть поиск",
   // Перевод выделенного с помощью ИИ
   aiSettings: "Настройки перевода ИИ",
   aiTranslate: "Перевод ИИ",

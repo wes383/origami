@@ -31,6 +31,12 @@ export const zh = {
   toc: "目录",
   tocClose: "关闭目录",
   thumbnails: "页面缩略图",
+  // 全文查找
+  search: "查找",
+  searchPlaceholder: "查找文本…",
+  searchPrev: "上一个结果",
+  searchNext: "下一个结果",
+  searchClose: "关闭查找",
   // AI 划词/划句翻译
   aiSettings: "AI 翻译设置",
   aiTranslate: "AI 翻译",

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { SearchRect } from "../lib/search";
 import {
   bindTextLayerSelection,
   unbindTextLayerSelection,
@@ -16,6 +17,10 @@ interface PdfPageProps {
   estimatedH: number;
   /** 是否进入懒渲染缓冲区 */
   visible: boolean;
+  /** 本页的搜索高亮矩形（归一化坐标，与渲染进度无关立即上屏） */
+  highlights: SearchRect[];
+  /** 当前选中匹配 id（用于强调样式与滚动定位） */
+  activeHighlightId: string | null;
 }
 
 export default function PdfPage({
@@ -25,6 +30,8 @@ export default function PdfPage({
   estimatedW,
   estimatedH,
   visible,
+  highlights,
+  activeHighlightId,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +125,24 @@ export default function PdfPage({
       style={{ width: boxW, height: boxH }}
     >
       <canvas ref={canvasRef} className={rendered ? "is-rendered" : ""} />
+      {/* 搜索高亮层：位于 canvas 与文本层之间，不拦截鼠标（选区不受影响） */}
+      {highlights.length > 0 && (
+        <div className="pdf-hl-layer" aria-hidden="true">
+          {highlights.map((r, i) => (
+            <div
+              key={`${r.matchId}-${i}`}
+              data-hl={r.matchId}
+              className={`pdf-hl ${r.matchId === activeHighlightId ? "is-active" : ""}`}
+              style={{
+                left: `${r.x * 100}%`,
+                top: `${r.y * 100}%`,
+                width: `${r.w * 100}%`,
+                height: `${r.h * 100}%`,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <div ref={textLayerRef} className="pdf-text-layer" />
       {!rendered && (
         <div className="pdf-page-placeholder" aria-hidden="true">

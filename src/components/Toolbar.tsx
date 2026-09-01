@@ -14,6 +14,7 @@ import {
   ListIcon,
   MinusIcon,
   PlusIcon,
+  SearchIcon,
   SettingsIcon,
   XIcon,
 } from "./Icons";
@@ -46,6 +47,8 @@ interface ToolbarProps {
   onCloseFile: () => void;
   /** 打开 AI 翻译设置弹窗 */
   onOpenAiSettings: () => void;
+  /** 打开全文查找 */
+  onOpenSearch: () => void;
   /** 当前文档是否含目录 */
   outlineAvailable: boolean;
   /** 侧边栏是否展开 */
@@ -77,6 +80,7 @@ export default function Toolbar({
   onOpen,
   onCloseFile,
   onOpenAiSettings,
+  onOpenSearch,
   outlineAvailable,
   sidebarOpen,
   sidebarTab,
@@ -535,6 +539,15 @@ export default function Toolbar({
               aria-label={fitIntent === "fit-width" ? t("fitWidth") : t("fitPage")}
             >
               {fitIntent === "fit-width" ? <FitWidthIcon /> : <FitPageIcon />}
+            </button>
+            <button
+              type="button"
+              className="tb-btn icon-only"
+              onClick={onOpenSearch}
+              title={t("search")}
+              aria-label={t("search")}
+            >
+              <SearchIcon />
             </button>
           </>
         )}
