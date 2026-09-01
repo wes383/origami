@@ -148,6 +148,14 @@ export default function App() {
     setErrorKey(null);
   }, []);
 
+  // ---------- 禁用右键菜单（阅读器场景） ----------
+
+  useEffect(() => {
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    window.addEventListener("contextmenu", onContextMenu);
+    return () => window.removeEventListener("contextmenu", onContextMenu);
+  }, []);
+
   // ---------- 拖拽打开（Tauri2 拦截 HTML5 drop，须用官方事件） ----------
 
   useEffect(() => {
