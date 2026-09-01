@@ -605,20 +605,39 @@ button:disabled {
 /* 全屏 auto-hide 工具栏（Toolbar.tsx 在全屏时根据鼠标位置切换 .toolbar-hidden）：
    默认滑出屏幕顶部，鼠标移到顶部（y ≤ 60，含工具栏自身）滑入，移出后延迟 400ms
    滑走（设置下拉菜单打开时禁止隐藏，见 Toolbar.tsx 的 menuOpenRef 判断）。
-   transform 上滑 + margin-bottom 负值抵消占位 —— 工具栏是文档流元素（flex column
-   顶部 52px），只 transform 会留下 52px 空隙；负 margin 让 .reader 同步上移占满全屏。
+   全屏下工具栏改为 position:fixed 悬浮层（脱离文档流，不占位），滑入/滑出只做
+   transform 平移 —— 内容全程不位移：无「滑入时把内容往下挤 52px」（侧边栏 tab
+   会随之下移、鼠标够不着），也无「隐藏时负 margin 拉回」的抖动。
+   仅给侧边栏预留 var(--toolbar-h) 顶部内边距（让 tab 区避开工具栏盖区），
+   PDF 阅读区不预留、保持 y=0 起沉浸，避免顶部出现一条与内容无关的背景色带。
    隐藏态 pointer-events: none 防止屏幕外的残留命中。 */
 .fs-on .toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   transition:
     background-color var(--duration-base) var(--ease-out),
-    transform 0.18s ease,
-    margin-bottom 0.18s ease;
+    transform 0.18s ease;
 }
 
 .fs-on .toolbar.toolbar-hidden {
   transform: translateY(-100%);
-  margin-bottom: calc(-1 * var(--toolbar-h));
   pointer-events: none;
+}
+
+/* 全屏侧边栏顶部预留工具栏高度（仅侧边栏，PDF 区保持沉浸）：
+   工具栏悬浮盖 y 0~52，若侧边栏 tab 也在 y 0~40，唤醒时会被工具栏盖住且触发
+   「鼠标下移→工具栏隐藏→tab 露出但鼠标已走→鼠标上移→工具栏又盖」的死循环。
+   给 .sidebar-panel 加 padding-top: var(--toolbar-h) 后，tab 区下移到 y ≥ 52：
+   工具栏盖 y 0~52 不盖 tab，鼠标移到 tab（y 52~92）时唤醒带 y≤60 仍触发工具栏
+   显示，但 tab 完整可见可点。box-sizing: border-box 下 height:100% + padding 不溢出。
+   侧边栏 panel 背景 var(--surface) 填满 padding box，顶部 52px 留白区显示 surface
+   色（与工具栏同色），工具栏隐藏时视觉上是一条"空工具栏带"，无突兀感。
+   PDF 区不预留，从 y=0 起全屏沉浸；工具栏滑入时盖 PDF 顶部 52px 是悬浮工具栏
+   的常规行为，鼠标移开即露，无白条问题。 */
+.fs-on .sidebar-panel {
+  padding-top: var(--toolbar-h);
 }
 
 /* 全屏唤醒探针条（Toolbar.tsx 全屏且未固定时渲染，紧跟 header 之后）：
