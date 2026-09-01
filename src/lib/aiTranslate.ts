@@ -1,0 +1,329 @@
+/**
+ * AI 划词/划句翻译 — OpenAI 兼容 Chat Completions 客户端。
+ *
+ * 配置（baseUrl / apiKey / model）持久化在 localStorage，仅供前端直接
+ * fetch 调用，不上传到任何第三方。CSP 为 null（tauri.conf.json），
+ * webview 内可直接请求外部 HTTPS 接口。
+ */
+
+const STORAGE_KEY = "pdfreader-ai-config";
+
+export interface AiConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+export function loadAiConfig(): AiConfig {
+  const fallback: AiConfig = { baseUrl: "", apiKey: "", model: "" };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<AiConfig>;
+    return {
+      baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
+      apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+      model: typeof parsed.model === "string" ? parsed.model : "",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveAiConfig(config: AiConfig): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isAiConfigured(config: AiConfig): boolean {
+  return config.baseUrl.trim() !== "" && config.apiKey.trim() !== "";
+}
+
+// ---------- 词语 / 句子判定 ----------
+
+export type TranslateMode = "word" | "sentence";
+
+/**
+ * 启发式判定选中内容是「单词/短语」还是「句子」：
+ *  - 含 CJK：≤20 字且无句末标点 → 词/短语；否则按句子翻译
+ *  - 拉丁文：≤8 个词且不含句末标点 → 词/短语；否则按句子翻译
+ * 误判时用户可在结果卡片里手动切换模式重新请求
+ */
+export function detectMode(text: string): TranslateMode {
+  const t = text.trim();
+  if (!t) return "word";
+  const hasCJK = /[\u3400-\u9fff\uf900-\ufaff]/.test(t);
+  if (hasCJK) {
+    return t.length <= 20 && !/[。！？；!?;]/.test(t) ? "word" : "sentence";
+  }
+  const stripped = t.replace(/["'“”‘’()[\]{}]+/g, " ");
+  const core = stripped.replace(/[.!?;:,]+$/, "");
+  const words = core.split(/\s+/).filter(Boolean).length;
+  const hasSentencePunct = /[.!?;](\s|$)/.test(stripped);
+  return words <= 8 && !hasSentencePunct ? "word" : "sentence";
+}
+
+// ---------- 上下文截取 ----------
+
+const CONTEXT_MAX = 3000;
+
+/**
+ * 文本层 textContent 压缩空白后，尽量以选中内容为中心截取窗口，
+ * 避免超长页面文本撑爆请求
+ */
+export function buildContext(layerText: string, selected: string): string {
+  const ctx = layerText.replace(/\s+/g, " ").trim();
+  if (!ctx) return "";
+  const needle = selected.replace(/\s+/g, " ").trim().slice(0, 60);
+  const idx = needle ? ctx.indexOf(needle) : -1;
+  if (idx >= 0) {
+    const half = Math.floor(CONTEXT_MAX / 2);
+    const start = Math.max(0, idx - half);
+    const end = Math.min(ctx.length, idx + needle.length + half);
+    const head = start > 0 ? "… " : "";
+    const tail = end < ctx.length ? " …" : "";
+    return head + ctx.slice(start, end) + tail;
+  }
+  return ctx.length > CONTEXT_MAX ? ctx.slice(0, CONTEXT_MAX) + " …" : ctx;
+}
+
+// ---------- 结果结构 ----------
+
+export interface WordSense {
+  pos?: string;
+  meaning: string;
+}
+
+export interface TranslateResult {
+  mode: TranslateMode;
+  /** 清理后的词头（word 模式） */
+  query?: string;
+  /** 音标（word 模式，非英文文本时可能为空） */
+  phonetic?: string | null;
+  /** 该词在本文上下文中的含义（word 模式） */
+  contextMeaning?: string;
+  /** 按词性分组的常见含义（word 模式） */
+  senses?: WordSense[];
+  /** 整句翻译（sentence 模式） */
+  translation?: string;
+  /** AI 未返回预期 JSON 时的原文兜底 */
+  raw?: string;
+}
+
+export class AiRequestError extends Error {}
+
+function targetLangName(lang: "zh" | "en"): string {
+  return lang === "zh" ? "简体中文" : "English";
+}
+
+function wordSystemPrompt(target: string): string {
+  return [
+    "You are an expert lexicographer and reading assistant for PDF documents.",
+    "The user selected a word or short phrase from a document; you are given the page text as context.",
+    "Tasks:",
+    "1. Locate the selected word/phrase in the context and determine its exact meaning as used there.",
+    "2. List all of its common meanings, grouped by part of speech, ordered by frequency (max 8 senses).",
+    `Write "contextMeaning" and every "meaning" in ${target}. Keep "pos" concise (e.g. "n.", "v.", "adj.", "短语").`,
+    "If the text is English, also give the IPA phonetic of the headword; otherwise set phonetic to null.",
+    "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
+    '{"query": string, "phonetic": string | null, "contextMeaning": string, "senses": [{"pos": string, "meaning": string}]}',
+  ].join("\n");
+}
+
+function sentenceSystemPrompt(target: string): string {
+  return [
+    "You are a professional translator for PDF documents.",
+    "The user selected a sentence (or passage); you are given the surrounding page text as context.",
+    `Translate the selected text into ${target}.`,
+    "Use the context to disambiguate pronouns, terminology and tone; keep the translation fluent and faithful.",
+    "If the selected text is already in the target language, produce a translation into the other language instead.",
+    "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
+    '{"translation": string}',
+  ].join("\n");
+}
+
+/** 从回复中稳健提取 JSON（容忍 ``` 围栏与前后闲话） */
+function extractJson(text: string): Record<string, unknown> | null {
+  let s = text.trim();
+  const fence = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(s);
+  if (fence) s = fence[1].trim();
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  try {
+    return JSON.parse(s.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function pickString(obj: Record<string, unknown>, key: string): string | undefined {
+  const v = obj[key];
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : undefined;
+}
+
+interface ChatMessage {
+  role: "system" | "user";
+  content: string;
+}
+
+/** 调用 OpenAI 兼容接口，返回原始文本 */
+async function chatCompletion(
+  config: AiConfig,
+  messages: ChatMessage[],
+  signal?: AbortSignal
+): Promise<string> {
+  const base = config.baseUrl.trim().replace(/\/+$/, "");
+  const url = /\/chat\/completions$/.test(base)
+    ? base
+    : `${base}/chat/completions`;
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey.trim()}`,
+      },
+      body: JSON.stringify({
+        model: config.model.trim(),
+        messages,
+        temperature: 0.3,
+        stream: false,
+      }),
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new AiRequestError(
+      "network:" + (err instanceof Error ? err.message : "fetch failed")
+    );
+  }
+
+  if (!resp.ok) {
+    let detail = "";
+    try {
+      const body = (await resp.json()) as {
+        error?: { message?: string } | string;
+      };
+      detail =
+        typeof body.error === "string"
+          ? body.error
+          : body.error?.message ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new AiRequestError(`http:${resp.status}:${detail}`);
+  }
+
+  const data = (await resp.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  if (!content.trim()) throw new AiRequestError("empty");
+  return content;
+}
+
+export interface TranslateParams {
+  config: AiConfig;
+  text: string;
+  context: string;
+  mode: TranslateMode;
+  lang: "zh" | "en";
+  signal?: AbortSignal;
+}
+
+/** 主入口：按模式构造 prompt 并解析结构化结果 */
+export async function translateSelection(
+  params: TranslateParams
+): Promise<TranslateResult> {
+  const { config, text, context, mode, lang, signal } = params;
+  const target = targetLangName(lang);
+  const contextBlock = context
+    ? `\n\nContext (page text where the selection appears):\n"""\n${context}\n"""`
+    : "";
+
+  const system =
+    mode === "word"
+      ? wordSystemPrompt(target)
+      : sentenceSystemPrompt(target);
+  const user =
+    mode === "word"
+      ? `Selected text: "${text}"${contextBlock}`
+      : `Selected text:\n"""\n${text}\n"""${contextBlock}`;
+
+  const raw = await chatCompletion(
+    config,
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    signal
+  );
+
+  const parsed = extractJson(raw);
+  if (!parsed) {
+    return { mode, raw: raw.trim() };
+  }
+  if (mode === "sentence") {
+    const translation =
+      pickString(parsed, "translation") ?? pickString(parsed, "text");
+    if (!translation) return { mode, raw: raw.trim() };
+    return { mode, translation };
+  }
+  const senses = Array.isArray(parsed.senses)
+    ? (parsed.senses as unknown[])
+        .map((s) => {
+          if (typeof s === "string") return { meaning: s };
+          if (s && typeof s === "object") {
+            const o = s as Record<string, unknown>;
+            const meaning = pickString(o, "meaning") ?? pickString(o, "definition");
+            if (!meaning) return null;
+            return { pos: pickString(o, "pos") ?? pickString(o, "partOfSpeech"), meaning };
+          }
+          return null;
+        })
+        .filter((s): s is WordSense => s !== null)
+    : [];
+  return {
+    mode,
+    query: pickString(parsed, "query") ?? text,
+    phonetic: pickString(parsed, "phonetic") ?? null,
+    contextMeaning: pickString(parsed, "contextMeaning"),
+    senses,
+  };
+}
+
+/** 设置弹窗「测试连接」：发送一条最小请求验证配置可用 */
+export async function testAiConnection(
+  config: AiConfig,
+  signal?: AbortSignal
+): Promise<void> {
+  await chatCompletion(
+    config,
+    [
+      { role: "system", content: "You are a connectivity probe." },
+      { role: "user", content: 'Reply with exactly: OK' },
+    ],
+    signal
+  );
+}
+
+/** 把错误对象转成适合展示的简短信息（i18n key 或原文） */
+export function describeAiError(err: unknown): string {
+  if (!(err instanceof AiRequestError)) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const msg = err.message;
+  if (msg.startsWith("network:")) return "network";
+  if (msg.startsWith("http:")) {
+    const status = msg.slice(5, 8).trim();
+    const detail = msg.slice(8).trim();
+    return detail ? `http:${status}:${detail}` : `http:${status}`;
+  }
+  return msg;
+}

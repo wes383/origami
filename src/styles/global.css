@@ -1004,3 +1004,430 @@ button:disabled {
     padding-inline: 12px;
   }
 }
+
+/* ==========================================================================
+   AI 划词/划句翻译
+   ========================================================================== */
+
+/* 选区末端浮现的「AI 翻译」气泡 */
+.tr-bubble {
+  position: fixed;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12.5px;
+  font-weight: 550;
+  box-shadow: var(--shadow-md);
+  transform: translateX(-50%);
+  animation: tr-pop var(--duration-fast) var(--ease-out);
+  user-select: none;
+}
+
+.tr-bubble:hover {
+  background: var(--accent-hover);
+}
+
+@keyframes tr-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* 结果卡片 */
+.tr-card {
+  position: fixed;
+  z-index: 80;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: dropdown-in var(--duration-base) var(--ease-out);
+}
+
+.tr-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 8px 8px 0 10px;
+}
+
+.tr-mode-switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--hover-bg);
+}
+
+.tr-mode-btn {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground-muted);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-mode-btn:hover:not(.is-active) {
+  color: var(--foreground);
+}
+
+.tr-mode-btn.is-active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.tr-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  color: var(--foreground-subtle);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-close:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+.tr-card-body {
+  padding: 10px 14px 14px;
+  overflow-y: auto;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* 加载与错误态 */
+.tr-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 2px;
+  color: var(--foreground-muted);
+  font-size: 13px;
+}
+
+.tr-loading .spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.tr-error {
+  padding: 6px 2px 2px;
+}
+
+.tr-error p {
+  color: var(--red-fg);
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.tr-retry {
+  margin-top: 8px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--foreground);
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.tr-retry:hover {
+  background: var(--hover-bg);
+}
+
+/* 词条模式 */
+.tr-word-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.tr-word {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--foreground);
+}
+
+.tr-phonetic {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--foreground-subtle);
+}
+
+.tr-section {
+  margin-top: 10px;
+}
+
+.tr-section h4 {
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--foreground-faint);
+  margin-bottom: 4px;
+}
+
+.tr-context-meaning {
+  color: var(--foreground);
+}
+
+.tr-senses {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tr-senses li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.tr-pos {
+  flex-shrink: 0;
+  min-width: 34px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  color: var(--foreground-muted);
+  font-size: 11px;
+  font-weight: 550;
+  text-align: center;
+  font-style: italic;
+}
+
+/* 整句模式 */
+.tr-original {
+  color: var(--foreground-muted);
+  font-size: 12.5px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tr-translation {
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+/* AI 未按结构返回时的兜底文本 */
+.tr-raw {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--foreground);
+}
+
+/* ---------- AI 设置弹窗 ---------- */
+
+.tr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: var(--overlay);
+  animation: tr-fade var(--duration-fast) var(--ease-out);
+}
+
+@keyframes tr-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tr-modal {
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: dropdown-in var(--duration-base) var(--ease-out);
+}
+
+.tr-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  color: var(--foreground);
+}
+
+.tr-modal-head h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.tr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tr-field > span {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--foreground-muted);
+}
+
+.tr-field input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.tr-field input:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+.tr-key-row {
+  position: relative;
+  display: flex;
+}
+
+.tr-key-row input {
+  flex: 1;
+  width: 100%;
+  padding-right: 56px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.tr-key-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  color: var(--foreground-subtle);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-key-toggle:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+.tr-hint {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground-subtle);
+}
+
+.tr-test-ok,
+.tr-test-fail {
+  font-size: 12.5px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.tr-test-ok {
+  color: #16a34a;
+}
+
+.tr-test-fail {
+  color: var(--red-fg);
+}
+
+.tr-modal-foot {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.tr-modal-foot-spacer {
+  flex: 1;
+}
+
+.tr-btn-secondary {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--foreground-muted);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tr-btn-secondary:hover:not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+.tr-btn-primary {
+  height: 32px;
+  padding: 0 18px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12.5px;
+  font-weight: 550;
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.tr-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+[data-theme="dark"] .tr-test-ok {
+  color: #4ade80;
+}

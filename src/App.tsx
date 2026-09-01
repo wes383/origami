@@ -15,6 +15,8 @@ import {
 } from "./lib/recent";
 import Toolbar from "./components/Toolbar";
 import PdfViewer, { type ViewMode } from "./components/PdfViewer";
+import TranslatePopup from "./components/TranslatePopup";
+import AiSettingsModal from "./components/AiSettingsModal";
 import EmptyState from "./components/EmptyState";
 import { DocIcon } from "./components/Icons";
 
@@ -61,6 +63,8 @@ export default function App() {
   );
   /** 最近打开的文件（localStorage 持久化，新→旧） */
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecent());
+  /** AI 划词翻译设置弹窗 */
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -330,6 +334,7 @@ export default function App() {
         onSetThemePref={setThemePref}
         onOpen={handleOpenDialog}
         onCloseFile={closeFile}
+        onOpenAiSettings={() => setAiSettingsOpen(true)}
         disabled={!pdf}
       />
 
@@ -378,6 +383,10 @@ export default function App() {
       )}
 
       {errorKey && <div className="error-toast">{t(errorKey)}</div>}
+
+      {/* AI 划词/划句翻译：选中 PDF 文本后浮现气泡，点击请求 AI */}
+      <TranslatePopup onOpenSettings={() => setAiSettingsOpen(true)} />
+      {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
     </div>
   );
 }

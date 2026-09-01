@@ -8,6 +8,7 @@ import {
   DocIcon,
   FitPageIcon,
   FitWidthIcon,
+  LanguagesIcon,
   MinusIcon,
   PlusIcon,
   SettingsIcon,
@@ -39,6 +40,8 @@ interface ToolbarProps {
   onOpen: () => void;
   /** 关闭当前文件，回到引导页 */
   onCloseFile: () => void;
+  /** 打开 AI 翻译设置弹窗 */
+  onOpenAiSettings: () => void;
   disabled: boolean;
 }
 
@@ -61,6 +64,7 @@ export default function Toolbar({
   onSetThemePref,
   onOpen,
   onCloseFile,
+  onOpenAiSettings,
   disabled,
 }: ToolbarProps) {
   const { t, lang, setLang } = useI18n();
@@ -185,6 +189,19 @@ export default function Toolbar({
                   <span>{t("closeFile")}</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                className="tb-dropdown-item"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenAiSettings();
+                }}
+              >
+                <LanguagesIcon />
+                <span>{t("aiSettings")}</span>
+              </button>
 
               <div className="tb-dropdown-separator" />
 
