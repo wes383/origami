@@ -14,11 +14,41 @@
 			? BUTTON_HOVER_BG_DARK
 			: BUTTON_HOVER_BG_LIGHT;
 
+	// 窗口操作走 window.__TAURI_INTERNALS__（内部 IPC 通道）。
+	// 注意：项目 tauri.conf.json 设了 withGlobalTauri:false，window.__TAURI__ 便捷对象
+	// 不再注入，但 __TAURI_INTERNALS__ 始终存在。这里用原生 invoke/transformCallback
+	// 等价实现 @tauri-apps/api 的 window/event 模块，避免依赖已关闭的全局对象。
 	const run = () => {
-		const tauri = window.__TAURI__;
-		if (!tauri) return setTimeout(run, 10);
+		const internals = window.__TAURI_INTERNALS__;
+		if (!internals || !internals.invoke) return setTimeout(run, 10);
 
-		const win = tauri.window.getCurrentWindow();
+		const label = internals.metadata && internals.metadata.currentWindow
+			? internals.metadata.currentWindow.label
+			: "main";
+
+		const invoke = (cmd, args) => internals.invoke(cmd, args);
+
+		// 等价 @tauri-apps/api/event 的 listen：注册回调并返回 unlisten。
+		const listen = (event, handler) => {
+			const target = { kind: "Window", label };
+			return invoke("plugin:event|listen", {
+				event,
+				target,
+				handler: internals.transformCallback(handler)
+			}).then((eventId) => async () => {
+				await invoke("plugin:event|unlisten", { event, eventId });
+			});
+		};
+
+		// 最小窗口适配对象，方法签名与 @tauri-apps/api 的 Window 一致。
+		const win = {
+			minimize: () => invoke("plugin:window|minimize", { label }),
+			toggleMaximize: () => invoke("plugin:window|toggle_maximize", { label }),
+			isMaximized: () => invoke("plugin:window|is_maximized", { label }),
+			close: () => invoke("plugin:window|close", { label }),
+			listen,
+			onResized: (handler) => listen("tauri://resize", handler)
+		};
 
 		const updateFrameInset = () => {
 			const minBtn = document.getElementById("frame-tb-minimize");
