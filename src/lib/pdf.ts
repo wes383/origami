@@ -8,6 +8,8 @@ export type { PDFDocumentProxy };
 
 export interface OpenedPdf {
   doc: PDFDocumentProxy;
+  /** 原始文件字节数（属性面板展示用） */
+  size: number;
   /** 销毁文档及其 worker 资源 */
   destroy: () => Promise<void>;
 }
@@ -51,6 +53,9 @@ export async function openPdf(
   data: Uint8Array,
   options?: OpenPdfOptions
 ): Promise<OpenedPdf> {
+  // 先记录字节数：pdfjs 会把 data 的 ArrayBuffer 通过 transferable 转移到
+  // worker 线程（detach），之后 data.byteLength 归 0，属性面板会显示 0 B。
+  const size = data.byteLength;
   // pdf.js 的 onPassword 挂在 task 上（不在 DocumentInitParameters 里）：
   // 调用 updatePassword(password) 继续，传入 Error 则中止加载
   const task = pdfjsLib.getDocument({ data });
@@ -69,7 +74,7 @@ export async function openPdf(
   }
   const doc = await task.promise;
   docKey(doc);
-  return { doc, destroy: () => task.destroy() };
+  return { doc, size, destroy: () => task.destroy() };
 }
 
 /* ==========================================================================

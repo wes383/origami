@@ -11,6 +11,7 @@ import {
   FitPageIcon,
   FitWidthIcon,
   GridIcon,
+  InfoIcon,
   KeyboardIcon,
   FullscreenIcon,
   FullscreenExitIcon,
@@ -61,6 +62,8 @@ interface ToolbarProps {
   onRotate: () => void;
   /** 打印当前文档 */
   onPrint: () => void;
+  /** 打开文件属性弹窗 */
+  onShowFileProps: () => void;
   /** 用户最后选择的 fit 模式，点击按钮将切换到另一个 */
   fitIntent: "fit-width" | "fit-page";
   onToggleFit: () => void;
@@ -112,6 +115,7 @@ export default function Toolbar({
   onFlipModeChange,
   onRotate,
   onPrint,
+  onShowFileProps,
   fitIntent,
   onToggleFit,
   effScale,
@@ -454,6 +458,19 @@ export default function Toolbar({
                   >
                     <PrinterIcon />
                     <span>{t("print")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="tb-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onShowFileProps();
+                    }}
+                  >
+                    <InfoIcon />
+                    <span>{t("fileProperties")}</span>
                   </button>
                 </>
               )}

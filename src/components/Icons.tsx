@@ -193,6 +193,17 @@ export function XIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 信息（lucide info）：圆圈 + i，文件属性入口用 */
+export function InfoIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8h.01" />
+      <path d="M11 12h1v4h1" />
+    </svg>
+  );
+}
+
 /** 文档图标（lucide file-text） */
 export function DocIcon({ size = 16 }: IconProps) {
   return (

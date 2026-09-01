@@ -34,6 +34,7 @@ import RightPanel from "./components/RightPanel";
 import { useTextActionEngine, type RightTab } from "./hooks/useTextActionEngine";
 import AiSettingsModal from "./components/AiSettingsModal";
 import ShortcutsHelp from "./components/ShortcutsHelp";
+import FilePropertiesModal from "./components/FilePropertiesModal";
 import EmptyState from "./components/EmptyState";
 import { DocIcon } from "./components/Icons";
 
@@ -74,6 +75,8 @@ export default function App() {
 
   const [pdf, setPdf] = useState<OpenedPdf | null>(null);
   const [fileName, setFileName] = useState("");
+  /** 当前文件完整路径（文件属性弹窗展示） */
+  const [filePath, setFilePath] = useState("");
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   /** 用户显式跳转意图（页码输入/前后翻页）。追踪观察器只跟随滚动，不触发滚动 */
@@ -122,6 +125,8 @@ export default function App() {
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   /** 快捷键帮助面板 */
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** 文件属性弹窗 */
+  const [filePropsOpen, setFilePropsOpen] = useState(false);
   /** 全屏模式（Tauri 原生窗口全屏） */
   const [isFullscreen, setIsFullscreen] = useState(false);
   /** 当前文档的目录树 */
@@ -302,6 +307,7 @@ export default function App() {
         setFlipMode(restored?.flipMode ?? "scroll");
 
         setFileName(path.split(/[\\/]/).pop() ?? path);
+        setFilePath(path);
         currentPathRef.current = path;
         setRecentFiles(addRecent(path));
 
@@ -369,6 +375,7 @@ export default function App() {
     pdfRef.current = null;
     setPdf(null);
     setFileName("");
+    setFilePath("");
     setNumPages(0);
     setCurrentPage(1);
     setJumpTarget(null);
@@ -833,6 +840,7 @@ export default function App() {
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
         onShowShortcuts={() => setShortcutsOpen(true)}
+        onShowFileProps={() => setFilePropsOpen(true)}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
         onOpenSearch={() => setSearchOpen(true)}
@@ -986,6 +994,16 @@ export default function App() {
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
       {shortcutsOpen && (
         <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />
+      )}
+      {pdf && filePropsOpen && (
+        <FilePropertiesModal
+          doc={pdf.doc}
+          fileName={fileName}
+          filePath={filePath}
+          numPages={numPages}
+          fileSize={pdf.size}
+          onClose={() => setFilePropsOpen(false)}
+        />
       )}
     </div>
   );
