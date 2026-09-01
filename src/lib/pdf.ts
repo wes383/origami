@@ -12,9 +12,63 @@ export interface OpenedPdf {
   destroy: () => Promise<void>;
 }
 
-export async function openPdf(data: Uint8Array): Promise<OpenedPdf> {
+/* ==========================================================================
+   文档标识
+   ========================================================================== */
+
+/**
+ * 每个 doc 一个稳定短 id，供渲染缓存 / 文本缓存 / 缩略图缓存做 key 前缀。
+ * 不能用 doc.fingerprint（同文件多次打开一致，但不同文件可能为空且不稳定），
+ * 用 WeakMap 挂在实例上，随文档一起被 GC。
+ */
+const docKeys = new WeakMap<PDFDocumentProxy, string>();
+
+export function docKey(doc: PDFDocumentProxy): string {
+  let id = docKeys.get(doc);
+  if (!id) {
+    id = Math.random().toString(36).slice(2, 10);
+    docKeys.set(doc, id);
+  }
+  return id;
+}
+
+/* ==========================================================================
+   打开文档
+   ========================================================================== */
+
+export interface OpenPdfOptions {
+  /**
+   * 文档加密时向用户索取密码；reject 表示用户取消。
+   * 密码错误时 pdf.js 会以 wrong=true 再次调用。
+   */
+  requestPassword?: (wrong: boolean) => Promise<string>;
+}
+
+/** pdf.js PasswordResponses：1 = 需要密码，2 = 密码错误 */
+const INCORRECT_PASSWORD = 2;
+
+export async function openPdf(
+  data: Uint8Array,
+  options?: OpenPdfOptions
+): Promise<OpenedPdf> {
+  // pdf.js 的 onPassword 挂在 task 上（不在 DocumentInitParameters 里）：
+  // 调用 updatePassword(password) 继续，传入 Error 则中止加载
   const task = pdfjsLib.getDocument({ data });
+  if (options?.requestPassword) {
+    task.onPassword = (
+      updatePassword: (value: string | Error) => void,
+      reason: number
+    ): void => {
+      void options
+        .requestPassword!(reason === INCORRECT_PASSWORD)
+        .then((password) => updatePassword(password))
+        .catch((err) =>
+          updatePassword(err instanceof Error ? err : new Error(String(err)))
+        );
+    };
+  }
   const doc = await task.promise;
+  docKey(doc);
   return { doc, destroy: () => task.destroy() };
 }
 

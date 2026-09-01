@@ -7,10 +7,17 @@ import type { OpenedPdf, OutlineNode } from "./lib/pdf";
 import { openPdf, loadOutline } from "./lib/pdf";
 import type { SearchMatch } from "./lib/search";
 import { printDocument } from "./lib/print";
+import {
+  loadProgress,
+  saveProgress,
+  type FitIntent,
+  type ScaleMode,
+} from "./lib/progress";
 import { useI18n, type LangKeys } from "./i18n";
 import { useTheme } from "./hooks/useTheme";
 import {
   addRecent,
+  clearRecent,
   loadRecent,
   removeRecent,
   type RecentFile,
@@ -20,6 +27,7 @@ import PdfViewer, { type PageLayout, type FlipMode } from "./components/PdfViewe
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import SearchBar from "./components/SearchBar";
 import PrintDialog from "./components/PrintDialog";
+import PasswordDialog from "./components/PasswordDialog";
 import TranslatePopup from "./components/TranslatePopup";
 import AiSettingsModal from "./components/AiSettingsModal";
 import EmptyState from "./components/EmptyState";
@@ -32,7 +40,7 @@ const READER_PADDING_X_NARROW = 24; // ≤720px 窄断点（12px × 2），与 g
 const READER_PADDING_Y = 56; // 阅读区上下留白（28px × 2）
 const DOUBLE_PAGE_GAP = 16; // 双页模式两页之间的间隙，与 global.css .pdf-slot-pair 一致
 
-export type ScaleMode = "fit-width" | "fit-page" | "custom";
+export type { ScaleMode };
 
 export default function App() {
   const { t } = useI18n();
@@ -50,6 +58,10 @@ export default function App() {
   const [rotation, setRotation] = useState(0);
   /** 打印准备中（渲染整本文档位图） */
   const [printing, setPrinting] = useState(false);
+  /** 打印渲染进度（done / total），用于"正在准备打印…"下方显示 */
+  const [printProgress, setPrintProgress] = useState<{ done: number; total: number } | null>(
+    null
+  );
   /** 打印对话框（选择页码范围） */
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [scaleMode, setScaleMode] = useState<ScaleMode>("fit-width");
@@ -58,7 +70,7 @@ export default function App() {
    * 点击 fit 按钮后 scaleMode 固定为 custom（切页不再自动调整），
    * 但仍依据此状态在两种模式间来回切换
    */
-  const [fitIntent, setFitIntent] = useState<"fit-width" | "fit-page">("fit-width");
+  const [fitIntent, setFitIntent] = useState<FitIntent>("fit-page");
   const [scale, setScale] = useState(1);
   const [fitScale, setFitScale] = useState(1);
   const [fitPageScale, setFitPageScale] = useState(1);
@@ -70,6 +82,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [errorKey, setErrorKey] = useState<LangKeys | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /** 加密文档密码输入弹窗 */
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  /** 当前密码是否已判错一次（用于弹窗提示与重新弹出） */
+  const [passwordWrong, setPasswordWrong] = useState(false);
   /** 阅读区左右留白（跟随 CSS 断点：≤720px 减半） */
   const [narrowWindow, setNarrowWindow] = useState(
     () => typeof window !== "undefined" && window.innerWidth <= 720
@@ -89,6 +105,15 @@ export default function App() {
   const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([]);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [focusMatchId, setFocusMatchId] = useState<string | null>(null);
+
+  /** 当前文档路径（进度持久化与打印进度的 key；不含文件名） */
+  const currentPathRef = useRef<string>("");
+  /** 当前文档对象：loadFile/closeFile 里直接取，避免 setState 闭包过期 */
+  const pdfRef = useRef<OpenedPdf | null>(null);
+  /** 进度保存去抖：滚动连发时只落最后一次 */
+  const progressTimerRef = useRef<number | null>(null);
+  /** 待密码打开的文档数据（密码输入弹窗回调用） */
+  const pendingPasswordRef = useRef<Uint8Array | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -112,50 +137,131 @@ export default function App() {
 
   // ---------- 打开文件 ----------
 
-  const loadFile = useCallback(async (path: string) => {
-    if (!/\.pdf$/i.test(path)) {
-      setErrorKey("errorNotPdf");
-      return;
-    }
-    setLoading(true);
-    setErrorKey(null);
-    try {
-      const data = await readFile(path);
-      const opened = await openPdf(new Uint8Array(data));
-      const page1 = await opened.doc.getPage(1);
-      const vp = page1.getViewport({ scale: 1 });
-      setPdf((prev) => {
-        void prev?.destroy();
-        return opened;
-      });
-      setNumPages(opened.doc.numPages);
-      setCurrentPage(1);
-      setBasePage({ w: vp.width, h: vp.height });
-      pageSizesRef.current = new Map([[1, { w: vp.width, h: vp.height }]]);
-      setRefPage({ w: vp.width, h: vp.height });
-      setScaleMode("fit-width");
-      setFitIntent("fit-width");
-      setScale(1);
-      setRotation(0);
-      setFileName(path.split(/[\\/]/).pop() ?? path);
-      setRecentFiles(addRecent(path));
-      // 解析目录（失败不阻塞打开文档）
-      const parsedOutline = await loadOutline(opened.doc).catch(() => []);
-      setOutline(parsedOutline);
-      // 含目录的文档默认展开侧边栏（目录页签），便于导航
-      setSidebarTab("outline");
-      setSidebarOpen(parsedOutline.length > 0);
-      // 新文档：清空上一个文档的查找结果
-      setSearchMatches([]);
-      setActiveMatchId(null);
-      setFocusMatchId(null);
-    } catch {
-      setErrorKey("errorInvalid");
-    } finally {
-      setLoading(false);
-    }
+  /** 关闭上一份文档（销毁 worker 资源）。副作用放函数体，不走 setState updater */
+  const destroyCurrent = useCallback(() => {
+    const prev = pdfRef.current;
+    if (prev) void prev.destroy();
   }, []);
+
+  const loadFile = useCallback(
+    async (path: string) => {
+      if (!/\.pdf$/i.test(path)) {
+        setErrorKey("errorNotPdf");
+        return;
+      }
+      setLoading(true);
+      setErrorKey(null);
+      let opened: OpenedPdf;
+      try {
+        const data = await readFile(path);
+        const bytes = new Uint8Array(data);
+        // 加密文档：弹出密码框，取到密码后重试打开
+        opened = await openPdf(bytes, {
+          requestPassword: (wrong) =>
+            new Promise<string>((resolve, reject) => {
+              pendingPasswordRef.current = bytes;
+              setPasswordWrong(wrong);
+              setPasswordOpen(true);
+              passwordResolveRef.current = resolve;
+              passwordRejectRef.current = reject;
+            }),
+        });
+      } catch (err) {
+        // 用户取消密码输入：静默返回，不报"文件无效"
+        if (err instanceof Error && err.message === "password-cancelled") {
+          setLoading(false);
+          return;
+        }
+        setErrorKey("errorInvalid");
+        setLoading(false);
+        return;
+      }
+
+      // 打开成功：清理可能残留的密码弹窗状态
+      pendingPasswordRef.current = null;
+      passwordResolveRef.current = null;
+      passwordRejectRef.current = null;
+      setPasswordOpen(false);
+
+      try {
+        const page1 = await opened.doc.getPage(1);
+        const vp = page1.getViewport({ scale: 1 });
+
+        // 先销毁旧文档，再替换引用（避免 StrictMode 下 updater 跑两次）
+        destroyCurrent();
+        pdfRef.current = opened;
+        setPdf(opened);
+
+        const restored = loadProgress(path);
+        const total = opened.doc.numPages;
+        const page = Math.min(Math.max(1, restored?.page ?? 1), total);
+
+        setNumPages(total);
+        setCurrentPage(page);
+        setBasePage({ w: vp.width, h: vp.height });
+        pageSizesRef.current = new Map([[1, { w: vp.width, h: vp.height }]]);
+        setRefPage({ w: vp.width, h: vp.height });
+
+        // 恢复上次的视图偏好；无记录时默认「适合页面」（P0-4：按钮首显适合页面）
+        const sm = restored?.scaleMode ?? "fit-width";
+        setScaleMode(sm);
+        setFitIntent(restored?.fitIntent ?? "fit-page");
+        setScale(restored?.scale ?? 1);
+        setRotation(restored?.rotation ?? 0);
+        setPageLayout(restored?.pageLayout ?? "single");
+        setFlipMode(restored?.flipMode ?? "scroll");
+
+        setFileName(path.split(/[\\/]/).pop() ?? path);
+        currentPathRef.current = path;
+        setRecentFiles(addRecent(path));
+
+        // 解析目录（失败不阻塞打开文档）
+        const parsedOutline = await loadOutline(opened.doc).catch(() => []);
+        setOutline(parsedOutline);
+        // 含目录的文档默认展开侧边栏（目录页签），便于导航
+        setSidebarTab("outline");
+        setSidebarOpen(parsedOutline.length > 0);
+
+        // 新文档：清空上一个文档的查找结果
+        setSearchMatches([]);
+        setActiveMatchId(null);
+        setFocusMatchId(null);
+
+        // 恢复到上次阅读页（首开时即第 1 页，无需滚动）
+        if (page > 1) setJumpTarget(page);
+      } catch {
+        setErrorKey("errorInvalid");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [destroyCurrent]
+  );
   loadFileRef.current = loadFile;
+
+  /** 密码输入弹窗的 resolve/reject：由 openPdf 的 requestPassword 挂载 */
+  const passwordResolveRef = useRef<((value: string) => void) | null>(null);
+  const passwordRejectRef = useRef<((err: unknown) => void) | null>(null);
+
+  const handlePasswordSubmit = useCallback(
+    (password: string) => {
+      setPasswordOpen(false);
+      passwordResolveRef.current?.(password);
+      passwordResolveRef.current = null;
+      passwordRejectRef.current = null;
+    },
+    []
+  );
+
+  const handlePasswordCancel = useCallback(() => {
+    setPasswordOpen(false);
+    setLoading(false);
+    pendingPasswordRef.current = null;
+    // reject 会让 openPdf 中止；此时 requestPassword 已 reject，走 catch 静默返回
+    passwordRejectRef.current?.(new Error("password-cancelled"));
+    passwordResolveRef.current = null;
+    passwordRejectRef.current = null;
+  }, []);
 
   const handleOpenDialog = useCallback(async () => {
     const selected = await openFileDialog({
@@ -168,18 +274,20 @@ export default function App() {
 
   /** 关闭当前文件，销毁文档资源并回到引导页 */
   const closeFile = useCallback(() => {
-    setPdf((prev) => {
-      void prev?.destroy();
-      return null;
-    });
+    destroyCurrent();
+    pdfRef.current = null;
+    setPdf(null);
     setFileName("");
     setNumPages(0);
     setCurrentPage(1);
+    setJumpTarget(null);
     setBasePage(null);
     setRefPage(null);
     pageSizesRef.current = new Map();
     setScaleMode("fit-width");
     setScale(1);
+    setFitScale(1);
+    setFitPageScale(1);
     setRotation(0);
     setErrorKey(null);
     setOutline([]);
@@ -189,7 +297,11 @@ export default function App() {
     setSearchMatches([]);
     setActiveMatchId(null);
     setFocusMatchId(null);
-  }, []);
+    setPrinting(false);
+    setPrintProgress(null);
+    setPasswordOpen(false);
+    currentPathRef.current = "";
+  }, [destroyCurrent]);
 
   // ---------- 禁用右键菜单（阅读器场景） ----------
 
@@ -217,8 +329,14 @@ export default function App() {
           setDragOver(false);
         } else if (payload.type === "drop") {
           setDragOver(false);
-          const path = payload.paths[0];
-          if (path) loadFileRef.current(path);
+          const paths = payload.paths ?? [];
+          if (paths.length === 0) return;
+          if (paths.length > 1) {
+            // 单窗口阅读器：多文件静默丢弃会让用户困惑，明确提示
+            setErrorKey("errorMultipleFiles");
+            return;
+          }
+          loadFileRef.current(paths[0]);
         }
       });
       if (disposed) fn();
@@ -347,6 +465,45 @@ export default function App() {
   const handleJumpHandled = useCallback(() => setJumpTarget(null), []);
   const handleFocusHandled = useCallback(() => setFocusMatchId(null), []);
 
+  // ---------- 阅读进度持久化 ----------
+
+  /**
+   * 页码 / 缩放 / 旋转 / 布局 / 翻页模式变化时（去抖 500ms）写回进度。
+   * 布局与翻页模式由 setState 包装函数驱动，这里只需在状态本身变化时落盘。
+   */
+  useEffect(() => {
+    const path = currentPathRef.current;
+    if (!path || !pdf) return;
+    if (progressTimerRef.current != null) window.clearTimeout(progressTimerRef.current);
+    progressTimerRef.current = window.setTimeout(() => {
+      progressTimerRef.current = null;
+      saveProgress(path, {
+        page: currentPage,
+        scaleMode,
+        scale,
+        fitIntent,
+        rotation,
+        pageLayout,
+        flipMode,
+      });
+    }, 500);
+    return () => {
+      if (progressTimerRef.current != null) {
+        window.clearTimeout(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+    };
+  }, [
+    pdf,
+    currentPage,
+    scaleMode,
+    scale,
+    fitIntent,
+    rotation,
+    pageLayout,
+    flipMode,
+  ]);
+
   // ---------- 全文查找 ----------
 
   /** 关闭查找并清空所有高亮 */
@@ -403,12 +560,16 @@ export default function App() {
       if (!pdf || printing || pages.length === 0) return;
       setPrintDialogOpen(false);
       setPrinting(true);
+      setPrintProgress({ done: 0, total: pages.length });
       try {
-        await printDocument(pdf.doc, pages);
+        await printDocument(pdf.doc, pages, (done, total) =>
+          setPrintProgress({ done, total })
+        );
       } catch {
         /* 渲染失败静默退出，不打断阅读 */
       } finally {
         setPrinting(false);
+        setPrintProgress(null);
       }
     },
     [pdf, printing]
@@ -526,7 +687,7 @@ export default function App() {
                 />
               )}
               <PdfViewer
-                key={`${fileName}-${pageLayout}-${flipMode}`}
+                key={fileName}
                 doc={pdf.doc}
                 numPages={numPages}
                 pageLayout={pageLayout}
@@ -554,6 +715,7 @@ export default function App() {
             recentFiles={recentFiles}
             onOpenRecent={loadFile}
             onRemoveRecent={(path) => setRecentFiles(removeRecent(path))}
+            onClearRecent={() => setRecentFiles(clearRecent())}
             onShowInFolder={(path) => void revealItemInDir(path).catch(() => {})}
           />
         )}
@@ -578,7 +740,14 @@ export default function App() {
       {printing && (
         <div className="loading-overlay">
           <div className="spinner" />
-          <span>{t("preparingPrint")}</span>
+          <span>
+            {t("preparingPrint")}
+            {printProgress && (
+              <span className="print-progress">
+                {printProgress.done}/{printProgress.total}
+              </span>
+            )}
+          </span>
         </div>
       )}
 
@@ -588,6 +757,14 @@ export default function App() {
           currentPage={currentPage}
           onConfirm={handlePrintConfirm}
           onClose={() => setPrintDialogOpen(false)}
+        />
+      )}
+
+      {passwordOpen && (
+        <PasswordDialog
+          wrong={passwordWrong}
+          onSubmit={handlePasswordSubmit}
+          onCancel={handlePasswordCancel}
         />
       )}
 

@@ -10,6 +10,8 @@ interface EmptyStateProps {
   onOpenRecent: (path: string) => void;
   /** 移除单条最近记录 */
   onRemoveRecent: (path: string) => void;
+  /** 清空全部最近记录 */
+  onClearRecent: () => void;
   /** 在系统文件管理器中显示该文件 */
   onShowInFolder: (path: string) => void;
 }
@@ -19,6 +21,7 @@ export default function EmptyState({
   recentFiles,
   onOpenRecent,
   onRemoveRecent,
+  onClearRecent,
   onShowInFolder,
 }: EmptyStateProps) {
   const { t } = useI18n();
@@ -36,6 +39,9 @@ export default function EmptyState({
         <div className="recent-panel">
           <div className="recent-header">
             <span className="recent-title">{t("recent")}</span>
+            <button type="button" className="recent-clear" onClick={onClearRecent}>
+              {t("clearAllRecent")}
+            </button>
           </div>
           <ul className="recent-list">
             {recentFiles.map((file) => (

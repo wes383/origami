@@ -101,4 +101,16 @@ export const fr: Record<LangKeys, string> = {
   wikiNotFound: "Aucun article correspondant trouvé",
   wikiEmpty: "Aucun résumé disponible pour cet article",
   wikiOpen: "Ouvrir dans Wikipédia",
+  // Document chiffré
+  pdfPasswordTitle: "Mot de passe requis",
+  pdfPasswordDesc: "Ce document est chiffré. Saisissez le mot de passe pour l'ouvrir.",
+  pdfPasswordWrong: "Mot de passe incorrect, réessayez",
+  pdfPasswordPlaceholder: "Mot de passe du document",
+  pdfPasswordOpen: "Ouvrir",
+  cancel: "Annuler",
+  // Recherche plein texte
+  searchScanning: "Analysé",
+  searchStop: "Arrêter la recherche",
+  clearAllRecent: "Effacer tous les fichiers récents",
+  errorMultipleFiles: "Un seul fichier peut être ouvert à la fois",
 };

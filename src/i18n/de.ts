@@ -101,4 +101,16 @@ export const de: Record<LangKeys, string> = {
   wikiNotFound: "Kein passender Artikel gefunden",
   wikiEmpty: "Für diesen Artikel ist keine Zusammenfassung verfügbar",
   wikiOpen: "In Wikipedia öffnen",
+  // Verschlüsseltes Dokument
+  pdfPasswordTitle: "Passwort erforderlich",
+  pdfPasswordDesc: "Dieses Dokument ist verschlüsselt. Bitte Passwort eingeben.",
+  pdfPasswordWrong: "Falsches Passwort, bitte erneut versuchen",
+  pdfPasswordPlaceholder: "Dokumentpasswort",
+  pdfPasswordOpen: "Öffnen",
+  cancel: "Abbrechen",
+  // Volltextsuche
+  searchScanning: "Durchsucht",
+  searchStop: "Suche stoppen",
+  clearAllRecent: "Alle zuletzt geöffneten Dateien löschen",
+  errorMultipleFiles: "Es kann nur eine Datei gleichzeitig geöffnet werden",
 };

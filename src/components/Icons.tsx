@@ -26,6 +26,23 @@ export function SearchIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 停止（lucide square，实心） */
+export function StopIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <rect
+        x="7"
+        y="7"
+        width="10"
+        height="10"
+        rx="1.5"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
 /** 上箭头（lucide chevron-up） */
 export function ChevronUpIcon({ size = 16 }: IconProps) {
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { OutlineNode } from "../lib/pdf";
+import { docKey, type OutlineNode } from "../lib/pdf";
+import { renderCacheGet, renderCacheSet, thumbCacheKey } from "../lib/renderCache";
 import { useI18n } from "../i18n";
 import { ChevronDownIcon, ChevronRightIcon, XIcon } from "./Icons";
 
@@ -290,13 +291,28 @@ function Thumb({
     let renderTask: { cancel(): void } | null = null;
     (async () => {
       try {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        // 缩略图缓存：重开同一文档时直接贴图，跳过重新解码
+        const cacheKey = thumbCacheKey(docKey(doc), pageNumber);
+        const cached = renderCacheGet(cacheKey);
+        if (cached) {
+          canvas.width = cached.width;
+          canvas.height = cached.height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) ctx.drawImage(cached, 0, 0);
+          if (cancelled) return;
+          setRatio(cached.height / cached.width);
+          setRendered(true);
+          return;
+        }
+
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
         const base = page.getViewport({ scale: 1 });
         const viewport = page.getViewport({ scale: THUMB_WIDTH / base.width });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const canvas = canvasRef.current;
-        if (!canvas) return;
         canvas.width = Math.floor(viewport.width * dpr);
         canvas.height = Math.floor(viewport.height * dpr);
         setRatio(viewport.height / viewport.width);
@@ -308,7 +324,9 @@ function Thumb({
         });
         renderTask = task;
         await task.promise;
-        if (!cancelled) setRendered(true);
+        if (cancelled) return;
+        setRendered(true);
+        renderCacheSet(cacheKey, canvas);
       } catch {
         /* 渲染取消或失败时静默处理 */
       }

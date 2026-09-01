@@ -101,4 +101,16 @@ export const ja: Record<LangKeys, string> = {
   wikiNotFound: "該当する記事が見つかりません",
   wikiEmpty: "この記事には概要がありません",
   wikiOpen: "Wikipedia で開く",
+  // 暗号化ドキュメント
+  pdfPasswordTitle: "パスワードが必要です",
+  pdfPasswordDesc: "このドキュメントは暗号化されています。パスワードを入力してください。",
+  pdfPasswordWrong: "パスワードが正しくありません",
+  pdfPasswordPlaceholder: "ドキュメントのパスワード",
+  pdfPasswordOpen: "開く",
+  cancel: "キャンセル",
+  // 全文検索
+  searchScanning: "検索済み",
+  searchStop: "検索を停止",
+  clearAllRecent: "最近開いたファイルをすべて消去",
+  errorMultipleFiles: "同時に開けるファイルは 1 つだけです",
 };

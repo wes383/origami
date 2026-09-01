@@ -6,7 +6,7 @@ import {
   useRef,
 } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import type { SearchMatch } from "../lib/search";
+import type { SearchMatch, SearchRect } from "../lib/search";
 import PdfPage from "./PdfPage";
 import { useVisiblePages } from "../hooks/useVisiblePages";
 
@@ -14,6 +14,9 @@ import { useVisiblePages } from "../hooks/useVisiblePages";
 export type PageLayout = "single" | "double";
 /** 翻页模式：连续滚动还是整页翻动 */
 export type FlipMode = "scroll" | "paged";
+
+/** 无高亮页共用的空数组：保持引用稳定，避免破坏 PdfPage 的 memo */
+const EMPTY_RECTS: SearchRect[] = [];
 
 interface PdfViewerProps {
   doc: PDFDocumentProxy;
@@ -168,6 +171,47 @@ export default function PdfViewer({
     el.scrollTop = 0;
   }, [currentPage, flipMode]);
 
+  // 模式/布局切换后恢复阅读位置。
+  // paged → scroll：容器由「渲染单页」变为「渲染全页」，scrollTop 归零，
+  // 若不主动滚动会停在第 1 页，随后观察器又把 currentPage 覆盖回 1。
+  // pageLayout 切换（single↔double）同理：内容总高度变化，位置失效。
+  // 仅在 flipMode/pageLayout「发生变化」的瞬间滚动一次，观察器驱动的
+  // currentPage 变化不触发（否则滚动途中会被反向打断）。
+  const prevModeRef = useRef<{ flip: FlipMode; layout: PageLayout } | null>(null);
+  useEffect(() => {
+    const prev = prevModeRef.current;
+    prevModeRef.current = { flip: flipMode, layout: pageLayout };
+    if (!prev) return; // 首次挂载不滚动（由 jumpTarget 处理恢复页）
+    const modeChanged = prev.flip !== flipMode;
+    const layoutChanged = prev.layout !== pageLayout;
+    if (!modeChanged && !layoutChanged) return;
+
+    // 只有当前处于连续滚动模式才需要恢复滚动位置；
+    // 翻页模式由 currentPage 直接驱动渲染，无需滚动
+    if (flipMode !== "scroll") return;
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    // 等待全页列表重渲染完成后再定位（切模式瞬间 DOM 尚未更新）
+    const id = requestAnimationFrame(() => {
+      const pageEl = el.querySelector<HTMLElement>(`[data-page="${currentPage}"]`);
+      if (!pageEl) return;
+      // 立即跳转（非平滑）：模式切换无需动画，且避免途经中间页改写页码。
+      // 用 rect 差值计算目标 scrollTop，不受 offsetParent 影响（与 jumpTarget 逻辑一致）
+      suppressTrackRef.current = true;
+      const delta = pageEl.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      el.scrollTop += delta;
+      // 延迟一帧再释放：IntersectionObserver 重建后的初始回调是异步的，
+      // 若此刻立即释放，观察器可能先用「视口仍在第 1 页」的旧快照把
+      // currentPage 覆盖回 1，再被下面的滚动纠正，造成短暂跳变
+      requestAnimationFrame(() => {
+        suppressTrackRef.current = false;
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [flipMode, pageLayout, currentPage]);
+
   // 缩放后恢复位置：Ctrl+滚轮走鼠标锚点；fit 倍率变化（窗口缩放等）锚定当前页顶部
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -270,13 +314,14 @@ export default function PdfViewer({
   const pw = (rotated ? basePage.h : basePage.w) * effScale;
   const ph = (rotated ? basePage.w : basePage.h) * effScale;
 
-  // 各页匹配（含矩形），供 PdfPage 高亮
-  const matchesByPage = useMemo(() => {
-    const map = new Map<number, SearchMatch[]>();
+  // 各页高亮矩形（已展平）。预先展平是为了让同一页在多次渲染间拿到
+  // 相同的数组引用 —— PdfPage 是 memo 组件，每次 flatMap 都会破坏 memo
+  const rectsByPage = useMemo(() => {
+    const map = new Map<number, SearchRect[]>();
     for (const m of searchMatches) {
       const list = map.get(m.page);
-      if (list) list.push(m);
-      else map.set(m.page, [m]);
+      if (list) list.push(...m.rects);
+      else map.set(m.page, [...m.rects]);
     }
     return map;
   }, [searchMatches]);
@@ -313,23 +358,30 @@ export default function PdfViewer({
     return out;
   }, [pageLayout, numPages]);
 
+  const renderPdf = (page: number, visible: boolean) => (
+    <PdfPage
+      // key 保证翻页时整页重挂载：否则复用实例会残留上一页的 canvas 内容
+      key={page}
+      doc={doc}
+      pageNumber={page}
+      scale={effScale}
+      rotation={rotation}
+      estimatedW={pw}
+      estimatedH={ph}
+      visible={visible}
+      highlights={rectsByPage.get(page) ?? EMPTY_RECTS}
+      activeHighlightId={activeMatchId}
+    />
+  );
+
+  /** 双页布局的页包装：负责 data-page 标记与观察器注册 */
   const renderPage = (page: number, visible: boolean) => (
     <div
       className="pdf-pair-page"
       data-page={page}
       ref={(el) => registerPage(page, el)}
     >
-      <PdfPage
-        doc={doc}
-        pageNumber={page}
-        scale={effScale}
-        rotation={rotation}
-        estimatedW={pw}
-        estimatedH={ph}
-        visible={visible}
-        highlights={matchesByPage.get(page)?.flatMap((m) => m.rects) ?? []}
-        activeHighlightId={activeMatchId}
-      />
+      {renderPdf(page, visible)}
     </div>
   );
 
@@ -351,19 +403,12 @@ export default function PdfViewer({
               {pagedStart + 1 <= numPages && renderPage(pagedStart + 1, true)}
             </div>
           ) : (
-            <div className="pdf-slot">
-              <PdfPage
-                key={currentPage}
-                doc={doc}
-                pageNumber={currentPage}
-                scale={effScale}
-                rotation={rotation}
-                estimatedW={pw}
-                estimatedH={ph}
-                visible
-                highlights={matchesByPage.get(currentPage)?.flatMap((m) => m.rects) ?? []}
-                activeHighlightId={activeMatchId}
-              />
+            <div
+              className="pdf-slot"
+              data-page={currentPage}
+              ref={(el) => registerPage(currentPage, el)}
+            >
+              {renderPdf(currentPage, true)}
             </div>
           )
         ) : pageLayout === "double" ? (
@@ -374,6 +419,10 @@ export default function PdfViewer({
             </div>
           ))
         ) : (
+          // 单页连续模式：直接渲染 PdfPage。此前外层 .pdf-slot 与内层
+          // .pdf-pair-page 都带 data-page 且注册了同一个页号，后者覆盖前者，
+          // 导致 querySelector 命中的元素与观察器观察的元素不一致，
+          // 跳转定位会差一个 margin
           Array.from({ length: numPages }, (_, i) => (
             <div
               key={i + 1}
@@ -381,7 +430,7 @@ export default function PdfViewer({
               ref={(el) => registerPage(i + 1, el)}
               data-page={i + 1}
             >
-              {renderPage(i + 1, visiblePages.has(i + 1))}
+              {renderPdf(i + 1, visiblePages.has(i + 1))}
             </div>
           ))
         )}

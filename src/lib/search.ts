@@ -1,5 +1,6 @@
 import { Util } from "pdfjs-dist";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { getPageTextContent } from "./pageText";
 
 /* ==========================================================================
    全文查找
@@ -39,19 +40,28 @@ const CONTEXT_CHARS = 40;
 /** 基线以上 ascent 占字号的比例（pdf.js 文本层无字体数据时的同款近似） */
 const ASCENT_RATIO = 0.8;
 
+export interface SearchOptions {
+  /** 每命中有匹配的一页回调一次；返回 false 立即中止 */
+  onPage: (matches: SearchMatch[]) => boolean;
+  /** 每扫描完一页回调一次（含无匹配的页）；返回 false 立即中止 */
+  onProgress?: (scanned: number, total: number) => boolean;
+}
+
 /**
  * 在文档中查找（不区分大小写），逐页流式回调。
- * onPage 返回 false 时中止（用于搜索词变更后取消旧任务）。
+ * 任意回调返回 false 即中止（用于搜索词变更或用户点击停止）。
  */
 export async function searchDocument(
   doc: PDFDocumentProxy,
   query: string,
-  onPage: (matches: SearchMatch[]) => boolean
+  options: SearchOptions
 ): Promise<void> {
+  const { onPage, onProgress } = options;
   const needle = query.toLowerCase();
   if (!needle) return;
 
-  for (let p = 1; p <= doc.numPages; p++) {
+  const total = doc.numPages;
+  for (let p = 1; p <= total; p++) {
     // 单页失败跳过，不中断整体搜索
     let page: Awaited<ReturnType<PDFDocumentProxy["getPage"]>>;
     try {
@@ -64,7 +74,8 @@ export async function searchDocument(
     let runs: { run: TextRunLike; start: number }[] = [];
     let text = "";
     try {
-      const content = await page.getTextContent();
+      // 走共享缓存：渲染文本层时已经取过一次的不必再解析
+      const content = await getPageTextContent(doc, p);
       // 拼接整页文本并记录每个 run 的起始偏移，
       // 使跨 run（PDF 常把一个词拆成多个 run）的匹配也能命中
       for (const raw of content.items) {
@@ -138,5 +149,7 @@ export async function searchDocument(
       }
       if (!onPage(matches)) return;
     }
+
+    if (onProgress && !onProgress(p, total)) return;
   }
 }

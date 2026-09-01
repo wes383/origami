@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { searchDocument, type SearchMatch } from "../lib/search";
 import { useI18n } from "../i18n";
@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   SearchIcon,
+  StopIcon,
   XIcon,
 } from "./Icons";
 
@@ -35,6 +36,8 @@ export default function SearchBar({
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [activeIdx, setActiveIdx] = useState(-1);
   const [searching, setSearching] = useState(false);
+  /** 已扫描页数 / 总页数：长文档查找时给出进度反馈 */
+  const [scanned, setScanned] = useState(0);
 
   // 挂载即聚焦输入框
   useEffect(() => {
@@ -62,11 +65,19 @@ export default function SearchBar({
     setSearching(true);
     setMatches([]);
     setActiveIdx(-1);
+    setScanned(0);
     (async () => {
-      await searchDocument(doc, committed, (pageMatches) => {
-        if (runIdRef.current !== runId) return false;
-        setMatches((prev) => [...prev, ...pageMatches]);
-        return true;
+      await searchDocument(doc, committed, {
+        onPage: (pageMatches) => {
+          if (runIdRef.current !== runId) return false;
+          setMatches((prev) => [...prev, ...pageMatches]);
+          return true;
+        },
+        onProgress: (done) => {
+          if (runIdRef.current !== runId) return false;
+          setScanned(done);
+          return true;
+        },
       });
       if (runIdRef.current !== runId) return;
       setSearching(false);
@@ -76,6 +87,15 @@ export default function SearchBar({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [committed, doc]);
+
+  /**
+   * 停止查找：仅推进代际号让进行中的回调返回 false（下一页即中止），
+   * 已收集到的结果保留，查找栏不关闭。
+   */
+  const stop = useCallback(() => {
+    runIdRef.current += 1;
+    setSearching(false);
+  }, []);
 
   // 结果集变化即上抛
   useEffect(() => {
@@ -100,7 +120,7 @@ export default function SearchBar({
   const close = () => onClose();
 
   const countLabel = searching
-    ? "…"
+    ? `${t("searchScanning")} ${scanned}/${doc.numPages}`
     : matches.length
       ? `${activeIdx + 1}/${matches.length}`
       : "0";
@@ -151,6 +171,17 @@ export default function SearchBar({
       >
         <ChevronDownIcon size={14} />
       </button>
+      {searching && (
+        <button
+          type="button"
+          className="search-nav"
+          onClick={stop}
+          title={t("searchStop")}
+          aria-label={t("searchStop")}
+        >
+          <StopIcon size={12} />
+        </button>
+      )}
       <button
         type="button"
         className="search-nav"

@@ -101,6 +101,18 @@ export const zh = {
   wikiNotFound: "未找到相关条目",
   wikiEmpty: "该条目没有可用的摘要内容",
   wikiOpen: "在 Wikipedia 中打开",
+  // 加密文档
+  pdfPasswordTitle: "需要密码",
+  pdfPasswordDesc: "该文档已加密，请输入打开密码",
+  pdfPasswordWrong: "密码错误，请重试",
+  pdfPasswordPlaceholder: "文档密码",
+  pdfPasswordOpen: "打开",
+  cancel: "取消",
+  // 全文查找
+  searchScanning: "已扫描",
+  searchStop: "停止查找",
+  clearAllRecent: "清空最近打开",
+  errorMultipleFiles: "一次只能打开一个文件",
 };
 
 export type LangKeys = keyof typeof zh;

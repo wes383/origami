@@ -101,4 +101,16 @@ export const en: Record<LangKeys, string> = {
   wikiNotFound: "No matching article found",
   wikiEmpty: "No summary available for this article",
   wikiOpen: "Open in Wikipedia",
+  // Encrypted document
+  pdfPasswordTitle: "Password required",
+  pdfPasswordDesc: "This document is encrypted. Enter the password to open it.",
+  pdfPasswordWrong: "Incorrect password, please try again",
+  pdfPasswordPlaceholder: "Document password",
+  pdfPasswordOpen: "Open",
+  cancel: "Cancel",
+  // Full-text search
+  searchScanning: "Scanned",
+  searchStop: "Stop searching",
+  clearAllRecent: "Clear all recent files",
+  errorMultipleFiles: "Only one file can be opened at a time",
 };

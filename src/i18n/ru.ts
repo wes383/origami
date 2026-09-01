@@ -101,4 +101,16 @@ export const ru: Record<LangKeys, string> = {
   wikiNotFound: "Статья не найдена",
   wikiEmpty: "Для этой статьи нет краткого содержания",
   wikiOpen: "Открыть в Википедии",
+  // Зашифрованный документ
+  pdfPasswordTitle: "Требуется пароль",
+  pdfPasswordDesc: "Документ зашифрован. Введите пароль, чтобы открыть его.",
+  pdfPasswordWrong: "Неверный пароль, попробуйте снова",
+  pdfPasswordPlaceholder: "Пароль документа",
+  pdfPasswordOpen: "Открыть",
+  cancel: "Отмена",
+  // Полнотекстовый поиск
+  searchScanning: "Проверено",
+  searchStop: "Остановить поиск",
+  clearAllRecent: "Очистить список недавних файлов",
+  errorMultipleFiles: "Одновременно можно открыть только один файл",
 };

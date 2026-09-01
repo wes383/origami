@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { TextLayer } from "pdfjs-dist";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { SearchRect } from "../lib/search";
+import { docKey } from "../lib/pdf";
+import { getPageTextContent } from "../lib/pageText";
+import { pageCacheKey, renderCacheGet, renderCacheSet } from "../lib/renderCache";
 import {
   bindTextLayerSelection,
   unbindTextLayerSelection,
@@ -42,7 +45,7 @@ function rotateRect(r: SearchRect, rotation: number): SearchRect {
   }
 }
 
-export default function PdfPage({
+function PdfPage({
   doc,
   pageNumber,
   scale,
@@ -86,26 +89,40 @@ export default function PdfPage({
 
         const w = Math.floor(viewport.width);
         const h = Math.floor(viewport.height);
-        canvas.width = Math.floor(viewport.width * dpr);
-        canvas.height = Math.floor(viewport.height * dpr);
         canvas.style.width = `${w}px`;
         canvas.style.height = `${h}px`;
         // 各页尺寸可能与首页不同：用真实尺寸替换估算占位，防止 overflow:hidden 裁掉底部
         setActualSize({ w, h });
 
-        const task = page.render({
-          canvas,
-          viewport,
-          // canvas  backing store 放大了 dpr 倍，需同步缩放绘制内容，否则内容只占左上角 1/dpr²
-          transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
-        });
-        renderTask = task;
-        await task.promise;
-        if (cancelled) return;
-        setRendered(true);
+        // 位图缓存：翻回上一页 / 重开文档时直接贴图，跳过 pdf.js 渲染
+        const cacheKey = pageCacheKey(docKey(doc), pageNumber, scale, rotation, dpr);
+        const cached = renderCacheGet(cacheKey);
+        if (cached) {
+          canvas.width = cached.width;
+          canvas.height = cached.height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) ctx.drawImage(cached, 0, 0);
+          if (cancelled) return;
+          setRendered(true);
+        } else {
+          canvas.width = Math.floor(viewport.width * dpr);
+          canvas.height = Math.floor(viewport.height * dpr);
+          const task = page.render({
+            canvas,
+            viewport,
+            // canvas  backing store 放大了 dpr 倍，需同步缩放绘制内容，否则内容只占左上角 1/dpr²
+            transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
+          });
+          renderTask = task;
+          await task.promise;
+          if (cancelled) return;
+          setRendered(true);
+          renderCacheSet(cacheKey, canvas);
+        }
 
         // 文本层：把透明文字覆盖到 canvas 上，使页面内容可被选中 / 复制
-        const textContent = await page.getTextContent();
+        // 走共享缓存，渲染与全文查找复用同一份解析结果
+        const textContent = await getPageTextContent(doc, pageNumber);
         if (cancelled) return;
         const layerEl = textLayerRef.current;
         if (!layerEl) return;
@@ -180,3 +197,9 @@ export default function PdfPage({
     </div>
   );
 }
+
+/**
+ * 页面渲染开销大：props 未变时整棵子树跳过重渲染。
+ * 前提是调用方传入稳定的 highlights 引用（见 PdfViewer 的 rectsByPage）。
+ */
+export default memo(PdfPage);

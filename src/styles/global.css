@@ -1190,9 +1190,7 @@ button:disabled {
   align-items: center;
   justify-content: center;
   background: var(--hover-bg);
-}
-
-.pdf-page-placeholder span {
+}.pdf-page-placeholder span {
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 500;
@@ -1264,6 +1262,23 @@ button:disabled {
   font-weight: 450;
   letter-spacing: 0.02em;
   color: var(--foreground-muted);
+}
+
+.recent-clear {
+  border: none;
+  background: transparent;
+  color: var(--foreground-muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.recent-clear:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
 }
 
 .recent-list {
@@ -1428,6 +1443,16 @@ button:disabled {
   border-top-color: #ffffff;
 }
 
+/* 打印渲染进度：显示在"正在准备打印…"下方的小字 */
+.print-progress {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.72);
+  font-variant-numeric: tabular-nums;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1458,7 +1483,7 @@ button:disabled {
 
   /* 每张位图占满一整页：100vh 对应纸张高度，
      object-fit contain 保持 PDF 页面比例，横页/竖页都不裁切 */
-  .print-root img {
+  .print-root canvas {
     display: block;
     width: 100%;
     height: 100vh;
@@ -1467,7 +1492,7 @@ button:disabled {
     break-after: page;
   }
 
-  .print-root img:last-child {
+  .print-root canvas:last-child {
     page-break-after: auto;
     break-after: auto;
   }
@@ -1933,6 +1958,18 @@ button:disabled {
   overflow: hidden;
 }
 
+/* 加密文档密码弹窗：窄一点，内容简单 */
+.password-dialog {
+  width: 360px;
+}
+
+.password-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--foreground-muted);
+}
+
 /* 标题栏固定：内容在下方独立滚动区 */
 .tr-modal-head {
   flex-shrink: 0;
@@ -2101,6 +2138,15 @@ button:disabled {
 
 .print-dialog {
   min-width: 380px;
+  /* 打印弹窗内容未用 .tr-form 包裹，这里补上左右内边距，
+     与设置弹窗（.tr-form padding: 0 20px 20px）保持一致 */
+  padding: 0 20px 20px;
+}
+
+/* 父级已提供左右内边距，标题栏的水平 padding 收回，避免叠加 */
+.print-dialog .tr-modal-head {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .print-range {

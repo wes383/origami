@@ -41,6 +41,7 @@ export async function printDocument(
   container.className = "print-root";
 
   const total = pages.length;
+  const canvases: HTMLCanvasElement[] = [];
   let done = 0;
   for (const p of pages) {
     const page = await doc.getPage(p);
@@ -50,28 +51,23 @@ export async function printDocument(
     canvas.height = Math.floor(viewport.height);
     await page.render({ canvas, viewport }).promise;
 
-    const img = document.createElement("img");
-    img.src = canvas.toDataURL("image/jpeg", 0.92);
-    container.appendChild(img);
-
-    // 及时释放 canvas 显存，长文档不至于累积
-    canvas.width = 0;
-    canvas.height = 0;
+    // 直接把 canvas 挂进打印 DOM：转成 dataURL 会同时驻留 JPEG 编码副本
+    // 与 base64 字符串，百页级文档峰值内存直接翻倍且容易 OOM
+    container.appendChild(canvas);
+    canvases.push(canvas);
     done += 1;
     onProgress?.(done, total);
   }
-
-  // 等全部图片解码完成再打印，避免打印出空白页
-  await Promise.all(
-    Array.from(container.querySelectorAll("img")).map((img) =>
-      img.decode().catch(() => {})
-    )
-  );
 
   document.body.appendChild(container);
   try {
     window.print();
   } finally {
     container.remove();
+    // 打印对话框关闭后立即回收 backing store（置 0 触发浏览器释放）
+    for (const canvas of canvases) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
   }
 }

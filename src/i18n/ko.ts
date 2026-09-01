@@ -101,4 +101,16 @@ export const ko: Record<LangKeys, string> = {
   wikiNotFound: "일치하는 문서를 찾을 수 없습니다",
   wikiEmpty: "이 문서에는 요약이 없습니다",
   wikiOpen: "Wikipedia에서 열기",
+  // 암호화된 문서
+  pdfPasswordTitle: "암호가 필요합니다",
+  pdfPasswordDesc: "이 문서는 암호화되어 있습니다. 암호를 입력하세요.",
+  pdfPasswordWrong: "암호가 올바르지 않습니다",
+  pdfPasswordPlaceholder: "문서 암호",
+  pdfPasswordOpen: "열기",
+  cancel: "취소",
+  // 전체 텍스트 검색
+  searchScanning: "검색됨",
+  searchStop: "검색 중지",
+  clearAllRecent: "최근 항목 모두 지우기",
+  errorMultipleFiles: "한 번에 하나의 파일만 열 수 있습니다",
 };
