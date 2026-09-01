@@ -134,7 +134,21 @@ export default function App() {
     const win = getCurrentWindow();
     win
       .isFullscreen()
-      .then((fs) => win.setFullscreen(!fs))
+      .then(async (fs) => {
+        // 进入全屏前先清除 WS_MAXIMIZE：tao 跨 maximize→fullscreen 切换时不会
+        // 自动复位最大化标志，OS 仍按工作区计算客户区高度，wry 据此把 WebView
+        // 视图停在「显示器高度 - 任务栏高度」，底部露出窗口默认黑色背景。
+        // 表现为：屏幕底部（原来任务栏位置）一条黑条，仿佛没真正全屏。
+        // 先 unmaximize 再 setFullscreen，让 WebView 跟着窗口铺到显示器完整尺寸。
+        if (!fs) {
+          try {
+            if (await win.isMaximized()) await win.unmaximize();
+          } catch {
+            /* 权限缺失或调用失败不影响后续切全屏 */
+          }
+        }
+        return win.setFullscreen(!fs);
+      })
       .then(() => win.isFullscreen())
       .then(setIsFullscreen)
       .catch(() => {});
