@@ -505,6 +505,14 @@ button:disabled {
   min-width: 0;
 }
 
+/* 工具栏按钮间的竖向分隔线（如适应宽度 | 搜索） */
+.tb-separator {
+  width: 1px;
+  height: 16px;
+  margin-inline: 4px;
+  background: var(--border);
+}
+
 .tb-left {
   justify-self: start;
 }
@@ -1426,6 +1434,45 @@ button:disabled {
   }
 }
 
+/* ==========================================================================
+   打印：隐藏应用 UI，仅显示 .print-root 中的整页位图
+   ========================================================================== */
+.print-root {
+  display: none;
+}
+
+@media print {
+  /* 页边距置 0：Chromium 的页眉（日期+标题）/页脚（URL+页码）
+     绘制在页边距区域内，无空间可画时即被抑制 */
+  @page {
+    margin: 0;
+  }
+
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root {
+    display: block;
+  }
+
+  /* 每张位图占满一整页：100vh 对应纸张高度，
+     object-fit contain 保持 PDF 页面比例，横页/竖页都不裁切 */
+  .print-root img {
+    display: block;
+    width: 100%;
+    height: 100vh;
+    object-fit: contain;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-root img:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+
 /* 错误提示 — Orkest 语义红 */
 .error-toast {
   position: fixed;
@@ -1873,24 +1920,49 @@ button:disabled {
 }
 
 .tr-modal {
+  display: flex;
+  flex-direction: column;
   width: 440px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
-  overflow-y: auto;
-  padding: 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-pop);
   animation: dropdown-in var(--duration-base) var(--ease-out);
+  overflow: hidden;
 }
 
+/* 标题栏固定：内容在下方独立滚动区 */
 .tr-modal-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  padding: 20px 20px 12px;
   color: var(--foreground);
+}
+
+/* 内容滚动区：自定义滚动条（与目录/缩略图列表一致） */
+.tr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hover-bg-strong) transparent;
+}
+
+.tr-form::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tr-form::-webkit-scrollbar-thumb {
+  background: var(--hover-bg-strong);
+  border-radius: 4px;
 }
 
 .tr-modal-head h3 {
@@ -1916,12 +1988,6 @@ button:disabled {
 .tr-modal-close:hover {
   background: var(--hover-bg);
   color: var(--foreground);
-}
-
-.tr-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .tr-field {
@@ -2031,6 +2097,68 @@ button:disabled {
   gap: 8px;
 }
 
+/* ---------- 打印对话框 ---------- */
+
+.print-dialog {
+  min-width: 380px;
+}
+
+.print-range {
+  display: flex;
+  gap: 8px;
+  margin-block: 4px 14px;
+}
+
+.print-range-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--foreground-secondary, var(--foreground));
+  transition: border-color var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out);
+}
+
+.print-range-item:hover {
+  background: var(--hover-bg);
+}
+
+.print-range-item.is-active {
+  border-color: var(--accent);
+  color: var(--foreground);
+}
+
+.print-range-item input[type="radio"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.print-custom-field {
+  margin-bottom: 14px;
+}
+
+.print-range-invalid {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--red-strong, #e5484d);
+}
+
+.print-page-count {
+  font-size: 12px;
+  color: var(--foreground-subtle);
+}
+
+.print-dialog .tr-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .tr-form-actions-spacer {
   flex: 1;
 }
@@ -2087,6 +2215,7 @@ button:disabled {
 }
 
 .tr-model-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -2095,8 +2224,37 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--background);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
   transition: background-color var(--duration-base) var(--ease-out),
     border-color var(--duration-base) var(--ease-out);
+}
+
+/* 拖拽排序状态：被拖拽行半透明；插入位置以 1px accent 细线指示。
+   偏移基准是 padding box：到边框外缘 1px，间隙 4px，故 -3.5px 使
+   细线（1px 高）几何中心正好落在两行间隙的中点上 */
+.tr-model-item.is-dragging {
+  opacity: 0.45;
+}
+
+.tr-model-item.is-drop-before::before,
+.tr-model-item.is-drop-after::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.tr-model-item.is-drop-before::before {
+  top: -3.5px;
+}
+
+.tr-model-item.is-drop-after::before {
+  bottom: -3.5px;
 }
 
 .tr-model-item.is-active {

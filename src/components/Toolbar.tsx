@@ -14,6 +14,8 @@ import {
   ListIcon,
   MinusIcon,
   PlusIcon,
+  PrinterIcon,
+  RotateIcon,
   SearchIcon,
   SettingsIcon,
   XIcon,
@@ -32,6 +34,10 @@ interface ToolbarProps {
   onPageLayoutChange: (layout: PageLayout) => void;
   flipMode: FlipMode;
   onFlipModeChange: (mode: FlipMode) => void;
+  /** 顺时针旋转 90° */
+  onRotate: () => void;
+  /** 打印当前文档 */
+  onPrint: () => void;
   /** 用户最后选择的 fit 模式，点击按钮将切换到另一个 */
   fitIntent: "fit-width" | "fit-page";
   onToggleFit: () => void;
@@ -71,6 +77,8 @@ export default function Toolbar({
   onPageLayoutChange,
   flipMode,
   onFlipModeChange,
+  onRotate,
+  onPrint,
   fitIntent,
   onToggleFit,
   effScale,
@@ -215,18 +223,33 @@ export default function Toolbar({
               </button>
 
               {!disabled && (
-                <button
-                  type="button"
-                  className="tb-dropdown-item is-danger"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onCloseFile();
-                  }}
-                >
-                  <XIcon />
-                  <span>{t("closeFile")}</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="tb-dropdown-item is-danger"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onCloseFile();
+                    }}
+                  >
+                    <XIcon />
+                    <span>{t("closeFile")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="tb-dropdown-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onPrint();
+                    }}
+                  >
+                    <PrinterIcon />
+                    <span>{t("print")}</span>
+                  </button>
+                </>
               )}
 
               {!disabled && (
@@ -277,6 +300,21 @@ export default function Toolbar({
 
                   <div className="tb-dropdown-separator" />
                 </>
+              )}
+
+              {!disabled && (
+                <button
+                  type="button"
+                  className="tb-dropdown-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRotate();
+                  }}
+                >
+                  <RotateIcon />
+                  <span>{t("rotatePage")}</span>
+                </button>
               )}
 
               <div className="tb-dropdown-label">{t("pageLayout")}</div>
@@ -566,6 +604,7 @@ export default function Toolbar({
             >
               {fitIntent === "fit-width" ? <FitWidthIcon /> : <FitPageIcon />}
             </button>
+            <span className="tb-separator" aria-hidden="true" />
             <button
               type="button"
               className="tb-btn icon-only"

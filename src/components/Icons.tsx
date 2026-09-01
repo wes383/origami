@@ -263,6 +263,27 @@ export function CopyIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 顺时针旋转（lucide rotate-cw） */
+export function RotateIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+    </svg>
+  );
+}
+
+/** 打印（lucide printer） */
+export function PrinterIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6" />
+      <rect x="6" y="14" width="12" height="8" rx="1" />
+    </svg>
+  );
+}
+
 /** 编辑（lucide pencil） */
 export function PencilIcon({ size = 16 }: IconProps) {
   return (

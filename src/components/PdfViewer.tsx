@@ -20,6 +20,8 @@ interface PdfViewerProps {
   numPages: number;
   pageLayout: PageLayout;
   flipMode: FlipMode;
+  /** 额外旋转角（0/90/180/270，顺时针） */
+  rotation: number;
   currentPage: number;
   onCurrentPageChange: (page: number) => void;
   /** 用户显式跳转的目标页（页码输入/前后翻页按钮）。追踪观察器只跟随滚动，永不引发滚动 */
@@ -51,6 +53,7 @@ export default function PdfViewer({
   numPages,
   pageLayout,
   flipMode,
+  rotation,
   currentPage,
   onCurrentPageChange,
   jumpTarget,
@@ -262,8 +265,10 @@ export default function PdfViewer({
     };
   }, [jumpTarget, flipMode, doc, onJumpHandled]);
 
-  const pw = basePage.w * effScale;
-  const ph = basePage.h * effScale;
+  // 占位尺寸：90°/270° 旋转时宽高互换
+  const rotated = rotation % 180 !== 0;
+  const pw = (rotated ? basePage.h : basePage.w) * effScale;
+  const ph = (rotated ? basePage.w : basePage.h) * effScale;
 
   // 各页匹配（含矩形），供 PdfPage 高亮
   const matchesByPage = useMemo(() => {
@@ -318,6 +323,7 @@ export default function PdfViewer({
         doc={doc}
         pageNumber={page}
         scale={effScale}
+        rotation={rotation}
         estimatedW={pw}
         estimatedH={ph}
         visible={visible}
@@ -351,6 +357,7 @@ export default function PdfViewer({
                 doc={doc}
                 pageNumber={currentPage}
                 scale={effScale}
+                rotation={rotation}
                 estimatedW={pw}
                 estimatedH={ph}
                 visible

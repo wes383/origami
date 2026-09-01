@@ -12,6 +12,8 @@ interface PdfPageProps {
   pageNumber: number;
   /** 当前生效缩放倍率 */
   scale: number;
+  /** 额外旋转角（0/90/180/270，顺时针；与页面自带旋转叠加） */
+  rotation: number;
   /** 按首页尺寸估算的占位宽高（CSS px），防止滚动跳动 */
   estimatedW: number;
   estimatedH: number;
@@ -23,10 +25,28 @@ interface PdfPageProps {
   activeHighlightId: string | null;
 }
 
+/**
+ * 归一化矩形随页面旋转（顺时针）变换：
+ * 90°/270° 时宽高互换，坐标绕归一化单位方块旋转
+ */
+function rotateRect(r: SearchRect, rotation: number): SearchRect {
+  switch (((rotation % 360) + 360) % 360) {
+    case 90:
+      return { ...r, x: 1 - (r.y + r.h), y: r.x, w: r.h, h: r.w };
+    case 180:
+      return { ...r, x: 1 - (r.x + r.w), y: 1 - (r.y + r.h) };
+    case 270:
+      return { ...r, x: r.y, y: 1 - (r.x + r.w), w: r.h, h: r.w };
+    default:
+      return r;
+  }
+}
+
 export default function PdfPage({
   doc,
   pageNumber,
   scale,
+  rotation,
   estimatedW,
   estimatedH,
   visible,
@@ -55,7 +75,11 @@ export default function PdfPage({
       try {
         const page = await doc.getPage(pageNumber);
         if (cancelled) return;
-        const viewport = page.getViewport({ scale });
+        // viewport.rotation 参数是绝对值（会覆盖页面自带旋转），需叠加页内原始旋转
+        const viewport = page.getViewport({
+          scale,
+          rotation: (page.rotate + rotation) % 360,
+        });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -113,7 +137,7 @@ export default function PdfPage({
       textLayer?.cancel();
       if (layerDiv) unbindTextLayerSelection(layerDiv);
     };
-  }, [doc, pageNumber, scale, visible]);
+  }, [doc, pageNumber, scale, rotation, visible]);
 
   const boxW = actualSize?.w ?? Math.floor(estimatedW);
   const boxH = actualSize?.h ?? Math.floor(estimatedH);
@@ -125,22 +149,26 @@ export default function PdfPage({
       style={{ width: boxW, height: boxH }}
     >
       <canvas ref={canvasRef} className={rendered ? "is-rendered" : ""} />
-      {/* 搜索高亮层：位于 canvas 与文本层之间，不拦截鼠标（选区不受影响） */}
+      {/* 搜索高亮层：位于 canvas 与文本层之间，不拦截鼠标（选区不受影响）。
+          矩形基于未旋转页面归一化坐标，旋转时同步变换 */}
       {highlights.length > 0 && (
         <div className="pdf-hl-layer" aria-hidden="true">
-          {highlights.map((r, i) => (
-            <div
-              key={`${r.matchId}-${i}`}
-              data-hl={r.matchId}
-              className={`pdf-hl ${r.matchId === activeHighlightId ? "is-active" : ""}`}
-              style={{
-                left: `${r.x * 100}%`,
-                top: `${r.y * 100}%`,
-                width: `${r.w * 100}%`,
-                height: `${r.h * 100}%`,
-              }}
-            />
-          ))}
+          {highlights.map((r, i) => {
+            const rr = rotateRect(r, rotation);
+            return (
+              <div
+                key={`${r.matchId}-${i}`}
+                data-hl={r.matchId}
+                className={`pdf-hl ${r.matchId === activeHighlightId ? "is-active" : ""}`}
+                style={{
+                  left: `${rr.x * 100}%`,
+                  top: `${rr.y * 100}%`,
+                  width: `${rr.w * 100}%`,
+                  height: `${rr.h * 100}%`,
+                }}
+              />
+            );
+          })}
         </div>
       )}
       <div ref={textLayerRef} className="pdf-text-layer" />

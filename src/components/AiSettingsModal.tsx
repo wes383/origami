@@ -184,6 +184,76 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
     if (editingId === id) resetForm();
   };
 
+  /** 拖拽排序（Pointer Events 手写实现）：
+   * Windows 上 Tauri 的 OLE 拖放拦截会吞掉 webview 内所有 HTML5 drag 事件，
+   * 因此不用 HTML5 DnD，而是按下 → 移动超阈值 → 跟踪指针 → 松手提交。 */
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ id: string; before: boolean } | null>(null);
+  const pressRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  const commitDrag = (targetId: string, before: boolean) => {
+    if (!dragId || dragId === targetId) return;
+    const item = profiles.find((p) => p.id === dragId);
+    if (!item) return;
+    const rest = profiles.filter((p) => p.id !== dragId);
+    let to = rest.findIndex((p) => p.id === targetId);
+    if (to < 0) to = rest.length;
+    if (!before) to += 1;
+    rest.splice(to, 0, item);
+    setProfiles(rest);
+    persist(rest, activeId);
+  };
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const press = pressRef.current;
+      if (!press) return;
+      if (!dragId) {
+        // 位移超过 4px 才判定为拖拽（避免与点击冲突）
+        if (Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) return;
+        setDragId(press.id);
+        suppressClickRef.current = true;
+      }
+      const list = listRef.current;
+      if (!list) return;
+      const rows = Array.from(
+        list.querySelectorAll<HTMLElement>("[data-profile-id]")
+      );
+      for (const row of rows) {
+        const rect = row.getBoundingClientRect();
+        if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const id = row.dataset.profileId ?? "";
+          setDropHint(
+            id && id !== dragId
+              ? { id, before: e.clientY < rect.top + rect.height / 2 }
+              : null
+          );
+          return;
+        }
+      }
+      setDropHint(null);
+    };
+    const onUp = () => {
+      if (dragId && dropHint) commitDrag(dropHint.id, dropHint.before);
+      pressRef.current = null;
+      setDragId(null);
+      setDropHint(null);
+      // click 在 pointerup 之后同步派发，用宏任务解除点击抑制
+      setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragId, dropHint, profiles, activeId]);
+
   /** 测试连接：测的是表单里当前输入的接口/Key/模型（而非已保存档案） */
   const handleTest = useCallback(async () => {
     if (!formValid) {
@@ -294,16 +364,26 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
             {profiles.length === 0 ? (
               <p className="tr-hint">{t("aiNoProfiles")}</p>
             ) : (
-              <div className="tr-model-list">
+              <div className="tr-model-list" ref={listRef}>
                 {profiles.map((p) => (
                   <div
                     key={p.id}
-                    className={`tr-model-item ${p.id === activeId ? "is-active" : ""}`}
+                    data-profile-id={p.id}
+                    className={`tr-model-item ${p.id === activeId ? "is-active" : ""} ${p.id === dragId ? "is-dragging" : ""} ${dropHint?.id === p.id ? (dropHint.before ? "is-drop-before" : "is-drop-after") : ""}`}
+                    onPointerDown={(e) => {
+                      if (e.button !== 0) return;
+                      // 编辑/删除小按钮上按下不启动拖拽
+                      if ((e.target as HTMLElement).closest(".tr-model-remove")) return;
+                      pressRef.current = { id: p.id, x: e.clientX, y: e.clientY };
+                    }}
                   >
                     <button
                       type="button"
                       className="tr-model-select"
-                      onClick={() => selectProfile(p.id)}
+                      onClick={() => {
+                        if (suppressClickRef.current) return;
+                        selectProfile(p.id);
+                      }}
                       title={p.id === activeId ? undefined : t("aiSetActive")}
                     >
                       <span className="tr-model-dot" aria-hidden="true" />

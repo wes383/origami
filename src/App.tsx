@@ -6,6 +6,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { OpenedPdf, OutlineNode } from "./lib/pdf";
 import { openPdf, loadOutline } from "./lib/pdf";
 import type { SearchMatch } from "./lib/search";
+import { printDocument } from "./lib/print";
 import { useI18n, type LangKeys } from "./i18n";
 import { useTheme } from "./hooks/useTheme";
 import {
@@ -18,6 +19,7 @@ import Toolbar from "./components/Toolbar";
 import PdfViewer, { type PageLayout, type FlipMode } from "./components/PdfViewer";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import SearchBar from "./components/SearchBar";
+import PrintDialog from "./components/PrintDialog";
 import TranslatePopup from "./components/TranslatePopup";
 import AiSettingsModal from "./components/AiSettingsModal";
 import EmptyState from "./components/EmptyState";
@@ -44,6 +46,12 @@ export default function App() {
   const [jumpTarget, setJumpTarget] = useState<number | null>(null);
   const [pageLayout, setPageLayout] = useState<PageLayout>("single");
   const [flipMode, setFlipMode] = useState<FlipMode>("scroll");
+  /** 额外旋转角（0/90/180/270，顺时针；叠加在页面自带旋转之上） */
+  const [rotation, setRotation] = useState(0);
+  /** 打印准备中（渲染整本文档位图） */
+  const [printing, setPrinting] = useState(false);
+  /** 打印对话框（选择页码范围） */
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [scaleMode, setScaleMode] = useState<ScaleMode>("fit-width");
   /**
    * 用户最后选择的 fit 模式（fit-width / fit-page）。
@@ -128,6 +136,7 @@ export default function App() {
       setScaleMode("fit-width");
       setFitIntent("fit-width");
       setScale(1);
+      setRotation(0);
       setFileName(path.split(/[\\/]/).pop() ?? path);
       setRecentFiles(addRecent(path));
       // 解析目录（失败不阻塞打开文档）
@@ -171,6 +180,7 @@ export default function App() {
     pageSizesRef.current = new Map();
     setScaleMode("fit-width");
     setScale(1);
+    setRotation(0);
     setErrorKey(null);
     setOutline([]);
     setSidebarOpen(false);
@@ -253,18 +263,21 @@ export default function App() {
    */
   const toggleFit = useCallback(() => {
     if (!refPage || !containerWidth || !containerHeight) return;
-    const spanW = pageLayout === "double" ? refPage.w * 2 + DOUBLE_PAGE_GAP : refPage.w;
+    const rotated = rotation % 180 !== 0;
+    const pageW = rotated ? refPage.h : refPage.w;
+    const pageH = rotated ? refPage.w : refPage.h;
+    const spanW = pageLayout === "double" ? pageW * 2 + DOUBLE_PAGE_GAP : pageW;
     const wFit = Math.max(
       0.1,
       (containerWidth - (narrowWindow ? READER_PADDING_X_NARROW : READER_PADDING_X)) /
         spanW
     );
-    const hFit = Math.max(0.1, (containerHeight - READER_PADDING_Y) / refPage.h);
+    const hFit = Math.max(0.1, (containerHeight - READER_PADDING_Y) / pageH);
     const next = fitIntent === "fit-width" ? wFit : Math.min(wFit, hFit);
     setFitIntent(fitIntent === "fit-width" ? "fit-page" : "fit-width");
     setScale(next);
     setScaleMode("custom");
-  }, [refPage, containerWidth, containerHeight, fitIntent, narrowWindow, pageLayout]);
+  }, [refPage, containerWidth, containerHeight, fitIntent, narrowWindow, pageLayout, rotation]);
 
   // 当前页变化时获取该页真实尺寸，作为 fit 倍率基准。
   // debounce 250ms：滚动经过多页时避免基准页/倍率连续变化导致布局抖动
@@ -293,16 +306,20 @@ export default function App() {
 
   // fit 倍率随基准页和容器尺寸变化（基准页 = 当前页）。
   // 左右留白与 CSS 断点对齐：≤720px 时 slot padding 减半。
-  // 双页模式宽度按"两页 + 页间隙"计算（首页单独一页时仍按两页预留，切页不跳动）
+  // 双页模式宽度按"两页 + 页间隙"计算（首页单独一页时仍按两页预留，切页不跳动）。
+  // 90°/270° 旋转时按交换后的宽高计算
   const paddingX = narrowWindow ? READER_PADDING_X_NARROW : READER_PADDING_X;
   useEffect(() => {
     if (!refPage) return;
-    const spanW = pageLayout === "double" ? refPage.w * 2 + DOUBLE_PAGE_GAP : refPage.w;
+    const rotated = rotation % 180 !== 0;
+    const pageW = rotated ? refPage.h : refPage.w;
+    const pageH = rotated ? refPage.w : refPage.h;
+    const spanW = pageLayout === "double" ? pageW * 2 + DOUBLE_PAGE_GAP : pageW;
     const wFit = Math.max(0.1, (containerWidth - paddingX) / spanW);
-    const hFit = Math.max(0.1, (containerHeight - READER_PADDING_Y) / refPage.h);
+    const hFit = Math.max(0.1, (containerHeight - READER_PADDING_Y) / pageH);
     setFitScale(wFit);
     setFitPageScale(Math.min(wFit, hFit));
-  }, [containerWidth, containerHeight, refPage, paddingX, pageLayout]);
+  }, [containerWidth, containerHeight, refPage, paddingX, pageLayout, rotation]);
 
   // ---------- 页码 ----------
 
@@ -369,6 +386,47 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pdf]);
 
+  /** 顺时针旋转 90°（0→90→180→270→0 循环） */
+  const rotateClockwise = useCallback(() => {
+    setRotation((r) => (r + 90) % 360);
+  }, []);
+
+  /** 打印当前文档：先弹范围对话框，确认后渲染所选页位图并调起系统打印 */
+  const handlePrint = useCallback(() => {
+    if (!pdf) return;
+    setPrintDialogOpen(true);
+  }, [pdf]);
+
+  /** 范围确认后执行打印 */
+  const handlePrintConfirm = useCallback(
+    async (pages: number[]) => {
+      if (!pdf || printing || pages.length === 0) return;
+      setPrintDialogOpen(false);
+      setPrinting(true);
+      try {
+        await printDocument(pdf.doc, pages);
+      } catch {
+        /* 渲染失败静默退出，不打断阅读 */
+      } finally {
+        setPrinting(false);
+      }
+    },
+    [pdf, printing]
+  );
+
+  /** Ctrl+P 打印（存在文档时） */
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        if (!pdf) return;
+        e.preventDefault();
+        setPrintDialogOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pdf]);
+
   // ---------- 键盘（翻页模式整页翻动，双页按对翻；滚动模式走原生滚动） ----------
 
   useEffect(() => {
@@ -413,6 +471,8 @@ export default function App() {
         onPageLayoutChange={setPageLayout}
         flipMode={flipMode}
         onFlipModeChange={setFlipMode}
+        onRotate={rotateClockwise}
+        onPrint={handlePrint}
         fitIntent={fitIntent}
         onToggleFit={toggleFit}
         effScale={effScale}
@@ -471,6 +531,7 @@ export default function App() {
                 numPages={numPages}
                 pageLayout={pageLayout}
                 flipMode={flipMode}
+                rotation={rotation}
                 currentPage={currentPage}
                 onCurrentPageChange={handlePageChange}
                 jumpTarget={jumpTarget}
@@ -512,6 +573,22 @@ export default function App() {
           <div className="spinner" />
           <span>{t("loading")}</span>
         </div>
+      )}
+
+      {printing && (
+        <div className="loading-overlay">
+          <div className="spinner" />
+          <span>{t("preparingPrint")}</span>
+        </div>
+      )}
+
+      {printDialogOpen && (
+        <PrintDialog
+          numPages={numPages}
+          currentPage={currentPage}
+          onConfirm={handlePrintConfirm}
+          onClose={() => setPrintDialogOpen(false)}
+        />
       )}
 
       {errorKey && <div className="error-toast">{t(errorKey)}</div>}
