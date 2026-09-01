@@ -343,6 +343,32 @@ export default function TranslatePopup({
     };
   }, [closeAll, readSelection]);
 
+  // 划词快捷键：选中 PDF 文本后按 T 触发 AI 翻译、按 W 搜索 Wikipedia
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // 仅裸键（无 Ctrl/Alt/Shift 修饰）；输入框内不触发
+      if (e.ctrlKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      )
+        return;
+      const key = e.key.toLowerCase();
+      if (key !== "t" && key !== "w") return;
+      // 优先用已显示的选区气泡，否则实时读取 PDF 文本层选区
+      const info = bubbleRef.current ?? readSelection();
+      if (!info) return;
+      e.preventDefault();
+      if (key === "t") runTranslate(info, detectMode(info.text));
+      else runWiki(info);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [runTranslate, runWiki, readSelection]);
+
 // 组件卸载时中止进行中的请求
   useEffect(() => () => abortRef.current?.abort(), []);
 

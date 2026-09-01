@@ -10,6 +10,7 @@ import {
   FitPageIcon,
   FitWidthIcon,
   GridIcon,
+  KeyboardIcon,
   LanguagesIcon,
   ListIcon,
   MinusIcon,
@@ -55,6 +56,8 @@ interface ToolbarProps {
   onCloseFile: () => void;
   /** 打开 AI 翻译设置弹窗 */
   onOpenAiSettings: () => void;
+  /** 打开快捷键帮助面板 */
+  onShowShortcuts: () => void;
   /** 打开全文查找 */
   onOpenSearch: () => void;
   /** 当前文档是否含目录 */
@@ -92,6 +95,7 @@ export default function Toolbar({
   onOpen,
   onCloseFile,
   onOpenAiSettings,
+  onShowShortcuts,
   onOpenSearch,
   outlineAvailable,
   sidebarOpen,
@@ -488,6 +492,19 @@ export default function Toolbar({
               >
                 <LanguagesIcon />
                 <span>{t("aiSettings")}</span>
+              </button>
+
+              <button
+                type="button"
+                className="tb-dropdown-item"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onShowShortcuts();
+                }}
+              >
+                <KeyboardIcon />
+                <span>{t("shortcutsTitle")}</span>
               </button>
             </div>
           )}

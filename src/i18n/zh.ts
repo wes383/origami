@@ -1,5 +1,6 @@
 export const zh = {
-  docTitle: "PDF 阅读器",
+  docTitle: "Origami",
+  openDropHint: "或将 PDF 文件拖拽到此处打开",
   openPdf: "打开 PDF",
   prevPage: "上一页",
   nextPage: "下一页",
@@ -117,6 +118,14 @@ export const zh = {
   tocSearchPlaceholder: "搜索目录…",
   tocMatchCount: "{n} 个结果",
   tocNoMatch: "未找到匹配的目录项",
+  // 快捷键
+  shortcutsTitle: "快捷键",
+  shortcutSidebar: "切换侧边栏",
+  shortcutZoomReset: "重置缩放（100%）",
+  shortcutFit: "切换适应宽度 / 页面",
+  shortcutWikipedia: "Wikipedia 搜索",
+  shortcutHelp: "显示本帮助",
+  shortcutSelectionHint: "选中文本后可用",
 };
 
 export type LangKeys = keyof typeof zh;

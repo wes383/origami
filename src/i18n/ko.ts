@@ -1,7 +1,8 @@
 import type { LangKeys } from "./zh";
 
 export const ko: Record<LangKeys, string> = {
-  docTitle: "PDF 리더",
+  docTitle: "Origami",
+  openDropHint: "또는 PDF 파일을 여기로 드래그하여 열 수 있습니다",
   openPdf: "PDF 열기",
   prevPage: "이전 페이지",
   nextPage: "다음 페이지",
@@ -117,4 +118,12 @@ export const ko: Record<LangKeys, string> = {
   tocSearchPlaceholder: "목차 검색…",
   tocMatchCount: "{n}개 결과",
   tocNoMatch: "일치하는 항목 없음",
+  // 키보드 단축키
+  shortcutsTitle: "키보드 단축키",
+  shortcutSidebar: "사이드바 켜기/끄기",
+  shortcutZoomReset: "확대 초기화 (100%)",
+  shortcutFit: "맞춤 너비 / 페이지 전환",
+  shortcutWikipedia: "Wikipedia 검색",
+  shortcutHelp: "이 도움말 표시",
+  shortcutSelectionHint: "텍스트 선택 후 사용",
 };

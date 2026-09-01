@@ -71,7 +71,7 @@ export async function searchDocument(
     }
     const viewport = page.getViewport({ scale: 1 });
 
-    let runs: { run: TextRunLike; start: number }[] = [];
+    const runs: { run: TextRunLike; start: number }[] = [];
     let text = "";
     try {
       // 走共享缓存：渲染文本层时已经取过一次的不必再解析

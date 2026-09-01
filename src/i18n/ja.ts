@@ -1,7 +1,8 @@
 import type { LangKeys } from "./zh";
 
 export const ja: Record<LangKeys, string> = {
-  docTitle: "PDF リーダー",
+  docTitle: "Origami",
+  openDropHint: "または PDF ファイルをここへドラッグして開く",
   openPdf: "PDF を開く",
   prevPage: "前のページ",
   nextPage: "次のページ",
@@ -117,4 +118,12 @@ export const ja: Record<LangKeys, string> = {
   tocSearchPlaceholder: "目次を検索…",
   tocMatchCount: "{n} 件",
   tocNoMatch: "一致する項目がありません",
+  // キーボードショートカット
+  shortcutsTitle: "キーボードショートカット",
+  shortcutSidebar: "サイドバーの表示切替",
+  shortcutZoomReset: "ズームをリセット（100%）",
+  shortcutFit: "幅 / ページへの表示を切替",
+  shortcutWikipedia: "Wikipedia で検索",
+  shortcutHelp: "このヘルプを表示",
+  shortcutSelectionHint: "テキストを選択後",
 };

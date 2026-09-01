@@ -28,11 +28,13 @@ export default function EmptyState({
 
   return (
     <div className="empty-state">
+      <h1 className="empty-title">Origami</h1>
       <div className="empty-card">
         <button type="button" className="btn-primary" onClick={onOpen}>
           <DocIcon size={15} />
           {t("openPdf")}
         </button>
+        <p className="empty-hint">{t("openDropHint")}</p>
       </div>
 
       {recentFiles.length > 0 && (

@@ -219,6 +219,16 @@ export function LanguagesIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 键盘（lucide keyboard） */
+export function KeyboardIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+    </svg>
+  );
+}
+
 /** 勾选（lucide check） */
 export function CheckIcon({ size = 16 }: IconProps) {
   return (

@@ -1,7 +1,8 @@
 import type { LangKeys } from "./zh";
 
 export const de: Record<LangKeys, string> = {
-  docTitle: "PDF-Reader",
+  docTitle: "Origami",
+  openDropHint: "Oder ziehen Sie eine PDF-Datei hierher, um sie zu öffnen",
   openPdf: "PDF öffnen",
   prevPage: "Vorherige Seite",
   nextPage: "Nächste Seite",
@@ -117,4 +118,12 @@ export const de: Record<LangKeys, string> = {
   tocSearchPlaceholder: "Inhaltsverzeichnis durchsuchen…",
   tocMatchCount: "{n} Treffer",
   tocNoMatch: "Keine passenden Einträge",
+  // Tastenkürzel
+  shortcutsTitle: "Tastenkürzel",
+  shortcutSidebar: "Seitenleiste umschalten",
+  shortcutZoomReset: "Zoom zurücksetzen (100 %)",
+  shortcutFit: "Breite / Seite umschalten",
+  shortcutWikipedia: "In Wikipedia suchen",
+  shortcutHelp: "Diese Hilfe anzeigen",
+  shortcutSelectionHint: "Nach Textauswahl",
 };

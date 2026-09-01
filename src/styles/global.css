@@ -1,5 +1,5 @@
 /* ==========================================================================
-   PDF 阅读器 — 基于 Orkest UI 设计语言
+   Origami — 基于 Orkest UI 设计语言
    暖色极简：米白背景 #fcfbfa、单色墨色 accent、药丸圆角、低对比边框
    ========================================================================== */
 
@@ -1335,6 +1335,17 @@ button:disabled {
   overflow-y: auto;
 }
 
+/* 首页品牌标题：统一产品名 Origami，使用 Outfit 可变字体 */
+.empty-title {
+  margin: 0 0 28px;
+  font-family: "Outfit Variable", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(30px, 7vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--foreground);
+}
+
 .empty-card {
   display: flex;
   flex-direction: column;
@@ -1347,6 +1358,14 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   animation: fade-slide-in var(--duration-slower, 300ms) var(--ease-out) both;
+}
+
+/* 打开按钮下方的拖拽提示 */
+.empty-hint {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--foreground-muted);
 }
 
 @keyframes fade-slide-in {
@@ -2146,6 +2165,89 @@ button:disabled {
 .tr-modal-close:hover {
   background: var(--hover-bg);
   color: var(--foreground);
+}
+
+/* 快捷键帮助面板 */
+.sc-modal {
+  width: 460px;
+}
+
+.sc-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 20px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hover-bg-strong) transparent;
+}
+
+.sc-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sc-body::-webkit-scrollbar-thumb {
+  background: var(--hover-bg-strong);
+  border-radius: 4px;
+}
+
+.sc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sc-row:last-child {
+  border-bottom: none;
+}
+
+.sc-keys {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sc-keys kbd {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--hover-bg);
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+/* 组合键之间的「+」分隔符（非按键，仅作连接） */
+.sc-plus {
+  margin: 0 5px;
+  color: var(--foreground-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  user-select: none;
+}
+
+.sc-desc {
+  flex: 1;
+  min-width: 0;
+  color: var(--foreground-muted);
+  font-size: 12.5px;
+}
+
+.sc-tag {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--foreground-faint);
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
 }
 
 .tr-field {

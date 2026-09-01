@@ -30,6 +30,7 @@ import PrintDialog from "./components/PrintDialog";
 import PasswordDialog from "./components/PasswordDialog";
 import TranslatePopup from "./components/TranslatePopup";
 import AiSettingsModal from "./components/AiSettingsModal";
+import ShortcutsHelp from "./components/ShortcutsHelp";
 import EmptyState from "./components/EmptyState";
 import { DocIcon } from "./components/Icons";
 
@@ -94,6 +95,8 @@ export default function App() {
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecent());
   /** AI 划词翻译设置弹窗 */
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  /** 快捷键帮助面板 */
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** 当前文档的目录树 */
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   /** 侧边栏展开状态 */
@@ -530,12 +533,12 @@ export default function App() {
     [flipMode, currentPage, goToPage]
   );
 
-  /** Ctrl+F 打开查找（存在文档时） */
+  /** Ctrl+F 打开查找；首页（无文档）也阻止系统默认查找行为 */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      if (e.ctrlKey && e.key.toLowerCase() === "f") {
+        e.preventDefault(); // 禁用系统默认 Ctrl+F（首页无文档时同样阻止浏览器/系统查找条）
         if (!pdf) return;
-        e.preventDefault();
         setSearchOpen(true);
       }
     };
@@ -578,7 +581,7 @@ export default function App() {
   /** Ctrl+P 打印（存在文档时） */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+      if (e.ctrlKey && e.key.toLowerCase() === "p") {
         if (!pdf) return;
         e.preventDefault();
         setPrintDialogOpen(true);
@@ -612,6 +615,83 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pdf, flipMode, pageLayout, currentPage, numPages, goToPage]);
+
+  // ---------- 键盘快捷键（全局，Windows 版仅用 Ctrl） ----------
+  // Ctrl 组合：O 打开、0 复位缩放、= 放大、- 缩小、\ 切换目录侧栏
+  // 纯键：? 帮助、R 旋转、F 适应（无文档 / 输入框聚焦时多数不触发）
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+
+      // —— 修饰键组合（仅 Ctrl，本应用仅发布 Windows 版）——
+      if (e.ctrlKey) {
+        const key = e.key.toLowerCase();
+        if (key === "o") {
+          e.preventDefault();
+          void handleOpenDialog();
+          return;
+        }
+        if (!pdf) return; // 其余组合需已打开文档
+        if (key === "0") {
+          e.preventDefault();
+          setZoomExact(1);
+        } else if (key === "=" || key === "+") {
+          e.preventDefault();
+          zoomIn();
+        } else if (key === "-") {
+          e.preventDefault();
+          zoomOut();
+        } else if (key === "\\") {
+          e.preventDefault();
+          // 同标签页重复点击则收起
+          if (sidebarOpen && sidebarTab === "outline") setSidebarOpen(false);
+          else {
+            setSidebarTab("outline");
+            setSidebarOpen(true);
+          }
+        }
+        return;
+      }
+
+      // —— 纯快捷键（无修饰键）——
+      if (typing) return;
+
+      // ? 打开快捷键帮助（Shift + /）
+      if (e.key === "?") {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      if (!pdf) return; // 以下需已打开文档
+      const key = e.key.toLowerCase();
+      if (key === "r") {
+        e.preventDefault();
+        rotateClockwise();
+      } else if (key === "f") {
+        e.preventDefault();
+        toggleFit();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    pdf,
+    sidebarOpen,
+    sidebarTab,
+    handleOpenDialog,
+    zoomIn,
+    zoomOut,
+    setZoomExact,
+    rotateClockwise,
+    toggleFit,
+  ]);
 
   // ---------- 错误提示自动消失 ----------
 
@@ -647,6 +727,7 @@ export default function App() {
         onOpen={handleOpenDialog}
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
+        onShowShortcuts={() => setShortcutsOpen(true)}
         onOpenSearch={() => setSearchOpen(true)}
         outlineAvailable={outline.length > 0}
         sidebarOpen={sidebarOpen}
@@ -773,6 +854,9 @@ export default function App() {
       {/* AI 划词/划句翻译：选中 PDF 文本后浮现气泡，点击请求 AI */}
       <TranslatePopup onOpenSettings={() => setAiSettingsOpen(true)} />
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
+      {shortcutsOpen && (
+        <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />
+      )}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import type { LangKeys } from "./zh";
 
 export const ru: Record<LangKeys, string> = {
-  docTitle: "Программа для чтения PDF",
+  docTitle: "Origami",
+  openDropHint: "Или перетащите PDF-файл сюда, чтобы открыть",
   openPdf: "Открыть PDF",
   prevPage: "Предыдущая страница",
   nextPage: "Следующая страница",
@@ -117,4 +118,12 @@ export const ru: Record<LangKeys, string> = {
   tocSearchPlaceholder: "Поиск по оглавлению…",
   tocMatchCount: "{n} совпадений",
   tocNoMatch: "Подходящих разделов не найдено",
+  // Горячие клавиши
+  shortcutsTitle: "Горячие клавиши",
+  shortcutSidebar: "Показать/скрыть панель",
+  shortcutZoomReset: "Сбросить масштаб (100 %)",
+  shortcutFit: "Переключить по ширине / по странице",
+  shortcutWikipedia: "Искать в Википедии",
+  shortcutHelp: "Показать эту справку",
+  shortcutSelectionHint: "После выделения текста",
 };
