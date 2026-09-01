@@ -30,6 +30,8 @@ import SearchBar from "./components/SearchBar";
 import PrintDialog from "./components/PrintDialog";
 import PasswordDialog from "./components/PasswordDialog";
 import TranslatePopup from "./components/TranslatePopup";
+import RightPanel from "./components/RightPanel";
+import { useTextActionEngine, type RightTab } from "./hooks/useTextActionEngine";
 import AiSettingsModal from "./components/AiSettingsModal";
 import ShortcutsHelp from "./components/ShortcutsHelp";
 import EmptyState from "./components/EmptyState";
@@ -128,6 +130,23 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** 侧边栏当前标签页（目录 / 缩略图） */
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
+  /** 右侧 AI 面板展开状态 */
+  const [rightOpen, setRightOpen] = useState(false);
+  /** 右侧面板当前标签页（AI 翻译 / Wikipedia） */
+  const [rightTab, setRightTab] = useState<RightTab>("translate");
+
+  /** 划词翻译 / Wikipedia 引擎：统一管理请求与结果（浮动 + 右侧面板两处呈现）。
+   *  依据右侧面板开合与当前 tab 决定结果落点。 */
+  const openAiSettings = useCallback(() => setAiSettingsOpen(true), []);
+  const engine = useTextActionEngine({
+    onOpenSettings: openAiSettings,
+    rightPanel: { open: rightOpen, tab: rightTab },
+  });
+
+  /** 切换文档（或关闭）时清空右侧面板残留内容，避免旧结果串入新文档 */
+  useEffect(() => {
+    engine.clearPanel();
+  }, [pdf, engine.clearPanel]);
   /** 全文查找 */
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([]);
@@ -365,6 +384,8 @@ export default function App() {
     setOutline([]);
     setSidebarOpen(false);
     setSidebarTab("outline");
+    setRightOpen(false);
+    setRightTab("translate");
     setSearchOpen(false);
     setSearchMatches([]);
     setActiveMatchId(null);
@@ -824,12 +845,18 @@ export default function App() {
             saveSidebarPref(true);
           }
         }}
+        rightPanelOpen={rightOpen}
+        onToggleRightPanel={() => setRightOpen((v) => !v)}
         disabled={!pdf}
       />
 
       <main className="reader">
         {pdf && basePage ? (
-          <div className={`reader-body ${sidebarOpen ? "with-sidebar" : ""}`}>
+          <div
+            className={`reader-body ${sidebarOpen ? "with-sidebar" : ""} ${
+              rightOpen ? "with-right-sidebar" : ""
+            }`}
+          >
             {sidebarOpen && (
               <Sidebar
                 key={fileName}
@@ -877,6 +904,17 @@ export default function App() {
                 onFocusHandled={handleFocusHandled}
               />
             </div>
+            {rightOpen && (
+              <RightPanel
+                tab={rightTab}
+                onTabChange={setRightTab}
+                onClose={() => {
+                  setRightOpen(false);
+                  engine.clearPanel();
+                }}
+                engine={engine}
+              />
+            )}
           </div>
         ) : (
           <EmptyState
@@ -940,7 +978,7 @@ export default function App() {
       {errorKey && <div className="error-toast">{t(errorKey)}</div>}
 
       {/* AI 划词/划句翻译：选中 PDF 文本后浮现气泡，点击请求 AI */}
-      <TranslatePopup onOpenSettings={() => setAiSettingsOpen(true)} />
+      <TranslatePopup engine={engine} rightPanel={{ open: rightOpen, tab: rightTab }} />
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
       {shortcutsOpen && (
         <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />

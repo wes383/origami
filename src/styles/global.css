@@ -1856,6 +1856,143 @@ button:disabled {
   .sidebar-panel {
     width: 216px;
   }
+
+  .right-panel {
+    width: 280px;
+  }
+}
+
+/* ==========================================================================
+   右侧 AI 面板（AI 翻译 / Wikipedia）
+   ========================================================================== */
+
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  min-height: 0;
+  animation: outline-in-rev var(--duration-slow) var(--ease-out);
+}
+
+@keyframes outline-in-rev {
+  from {
+    opacity: 0;
+    transform: translateX(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.right-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 12px 10px 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.right-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--hover-bg);
+}
+
+.right-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
+  color: var(--foreground-muted);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.right-tab:hover {
+  color: var(--foreground);
+}
+
+.right-tab.is-active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+
+.right-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--foreground-subtle);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.right-close:hover {
+  background: var(--hover-bg);
+  color: var(--foreground);
+}
+
+.right-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.right-empty {
+  margin: auto;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--foreground-faint);
+}
+
+/* 右侧面板内结果：不再是浮动弹窗卡，而是侧栏原生内容区域 */
+.tr-panel-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+.tr-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 0 0 10px 0;
+}
+
+.tr-panel-body {
+  overflow: visible;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.tr-wiki-panel-title {
+  font-size: 15.5px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  line-height: 1.35;
 }
 
 /* ==========================================================================

@@ -131,4 +131,7 @@ export const ko: Record<LangKeys, string> = {
   shortcutWikipedia: "Wikipedia 검색",
   shortcutHelp: "이 도움말 표시",
   shortcutSelectionHint: "텍스트 선택 후 사용",
+  aiSidebar: "AI 사이드바",
+  panelEmptyTranslate: "PDF 텍스트를 선택하면 AI 번역이 여기에 표시됩니다",
+  panelEmptyWikipedia: "PDF 텍스트를 선택하면 Wikipedia 설명이 여기에 표시됩니다",
 };

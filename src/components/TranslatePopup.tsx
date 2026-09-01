@@ -1,69 +1,39 @@
 /**
- * 划词/划句翻译弹层。
+ * 划词/划句翻译弹层（浮动态）。
  *
- * 交互流程：用户在 PDF 文本层选中内容 → 选区末端浮现「AI 翻译」气泡 →
- * 点击后请求 AI 并展示结果卡片。卡片头部可手动切换「词语释义 / 整句翻译」
- * 模式重新请求（启发式判定误判时的兜底），也可切换当前模型档案。
- * 翻译目标语言在 AI 设置弹窗里配置（见 AiSettingsModal），这里读取即可。
+ * 职责：监听 PDF 文本层选区 → 浮现「复制 / AI 翻译 / Wikipedia」气泡；
+ * 点击按钮或快捷键（T / W）发起请求。具体的请求与结果状态由
+ * useTextActionEngine 统一管理，这里只负责「浮动」这一呈现渠道。
  *
- * 上下文：取选区所在文本层（.pdf-text-layer）的整页文字，以选区为中心
- * 截取窗口后一并送给 AI，由其定位该词在文中的确切含义。
+ * 与右侧面板的联动：
+ *   - 若右侧面板已打开且处于 translate tab，选中文本后翻译结果直接进面板，
+ *     气泡不再显示「AI 翻译」按钮（其余按钮照常）。
+ *   - 若右侧面板已打开且处于 wikipedia tab，Wikipedia 结果直接进面板，
+ *     气泡不再显示「Wikipedia」按钮。
+ * 其余情况行为不变：气泡三个按钮齐全，结果以浮动卡片呈现。
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "../i18n";
-import {
-  buildContext,
-  describeAiError,
-  detectMode,
-  getActiveProfile,
-  isAiConfigured,
-  loadAiConfig,
-  loadTargetLang,
-  saveAiConfig,
-  TARGET_AUTO,
-  translateSelection,
-  type TranslateMode,
-  type TranslateResult,
-} from "../lib/aiTranslate";
-import {
-  fetchWikipediaSummary,
-  wikiLang,
-  type WikiResult,
-} from "../lib/wikipedia";
-import {
-  ChevronDownIcon,
-  CopyIcon,
-  GlobeIcon,
-  LanguagesIcon,
-  XIcon,
-} from "./Icons";
+import { detectMode, buildContext } from "../lib/aiTranslate";
+import { CopyIcon, GlobeIcon, LanguagesIcon } from "./Icons";
+import { TranslateCardView, WikiCardView } from "./TranslateCards";
+import type {
+  SelectionInfo,
+  TextActionEngine,
+  RightPanelState,
+} from "../hooks/useTextActionEngine";
 
-interface SelectionInfo {
+interface BubbleInfo {
   text: string;
   context: string;
   /** 选区矩形（viewport 坐标，px） */
   rect: { x: number; y: number; w: number; h: number };
 }
 
-type CardState = {
-  info: SelectionInfo;
-  mode: TranslateMode;
-  status: "loading" | "done" | "error";
-  result: TranslateResult | null;
-  errorDetail: string | null;
-};
-
-type WikiCardState = {
-  info: SelectionInfo;
-  status: "loading" | "done" | "error";
-  result: WikiResult | null;
-  /** 错误码：not-found | empty | network | http:<status> */
-  errorDetail: string | null;
-};
-
-const CARD_WIDTH = 380;
+/** 气泡组估算尺寸（水平 clamp 用，实际宽度随文案略有出入） */
+const BUBBLE_W = 300;
+const BUBBLE_H = 30;
 
 /** 复制文本到剪贴板（优先 Clipboard API，失败回退 execCommand） */
 async function copyText(text: string): Promise<boolean> {
@@ -87,12 +57,8 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** 气泡组估算尺寸（水平 clamp 用，实际宽度随文案略有出入） */
-const BUBBLE_W = 300;
-const BUBBLE_H = 30;
-
 /** 气泡定位：优先选区下方，底部空间不足时翻到选区上方；水平 clamp 到视口内 */
-function bubblePosition(rect: SelectionInfo["rect"]) {
+function bubblePosition(rect: BubbleInfo["rect"]) {
   const margin = 8;
   const cx = rect.x + rect.w / 2;
   const left = Math.max(
@@ -107,161 +73,32 @@ function bubblePosition(rect: SelectionInfo["rect"]) {
   return { left, top };
 }
 
-/** 结果卡片定位：优先选区下方，空间不足放上方；水平 clamp 到视口内 */
-function cardPosition(rect: SelectionInfo["rect"]) {
-  const margin = 12;
-  let x = rect.x + rect.w / 2 - CARD_WIDTH / 2;
-  x = Math.max(margin, Math.min(x, window.innerWidth - CARD_WIDTH - margin));
-  const below = rect.y + rect.h + 10;
-  const maxH = 460;
-  let top: number;
-  let height: number;
-  if (below + 200 <= window.innerHeight - margin) {
-    top = below;
-    height = Math.min(maxH, window.innerHeight - top - margin);
-  } else {
-    // 下方空间不足：卡片放选区上方，底部贴选区上方 10px 展开；
-    // 只有视口高度实在放不下 maxH 时才退回贴顶（top = margin）
-    const above = rect.y - 10;
-    top = Math.max(margin, above - maxH);
-    height = Math.min(maxH, above - margin);
-  }
-  return { left: x, top, maxHeight: Math.max(160, height) };
-}
-
 export default function TranslatePopup({
-  onOpenSettings,
+  engine,
+  rightPanel,
 }: {
-  onOpenSettings: () => void;
+  engine: TextActionEngine;
+  rightPanel: RightPanelState;
 }) {
-  const { t, lang: uiLang } = useI18n();
+  const { t } = useI18n();
 
-  const [bubble, setBubble] = useState<SelectionInfo | null>(null);
-  const [card, setCard] = useState<CardState | null>(null);
-  const [wiki, setWiki] = useState<WikiCardState | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [bubble, setBubble] = useState<BubbleInfo | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  /** 快照式 state 的同步 ref：事件回调里读取最新值，避免闭包过期 */
-  const cardRef = useRef<CardState | null>(null);
-  cardRef.current = card;
-  const wikiRef = useRef<WikiCardState | null>(null);
-  wikiRef.current = wiki;
-  const bubbleRef = useRef<SelectionInfo | null>(null);
+
+  // 快照式 state 的同步 ref：事件回调里读取最新值，避免闭包过期
+  const bubbleRef = useRef<BubbleInfo | null>(null);
   bubbleRef.current = bubble;
+  const floatingCardRef = useRef(engine.floatingCard);
+  floatingCardRef.current = engine.floatingCard;
+  const floatingWikiRef = useRef(engine.floatingWiki);
+  floatingWikiRef.current = engine.floatingWiki;
+  /** 上次已处理选区的文本签名：仅「新选区」才路由进面板，避免旧选区重复触发请求 */
+  const lastSelRef = useRef<string>("");
 
   const closeAll = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
+    engine.closeAll();
     setBubble(null);
-    setCard(null);
-    setWiki(null);
-    setMenuOpen(false);
-  }, []);
-
-  // ---------- 发起翻译请求 ----------
-
-  const runTranslate = useCallback(
-    (info: SelectionInfo, mode: TranslateMode) => {
-      abortRef.current?.abort();
-      const config = loadAiConfig();
-      if (!isAiConfigured(config)) {
-        closeAll();
-        onOpenSettings();
-        return;
-      }
-      const ac = new AbortController();
-      abortRef.current = ac;
-      setCard({ info, mode, status: "loading", result: null, errorDetail: null });
-      // 目标语言在 AI 设置弹窗里配置；「跟随界面语言」时直接解析为当前 UI 语言
-      //（UI 语言 10 种与 TARGET_LANGS 一一对应）
-      const raw = loadTargetLang();
-      const target = raw === TARGET_AUTO ? uiLang : raw;
-      translateSelection({
-        config,
-        text: info.text,
-        context: info.context,
-        mode,
-        lang: target,
-        signal: ac.signal,
-      })
-        .then((result) => {
-          if (ac.signal.aborted) return;
-          setCard({ info, mode, status: "done", result, errorDetail: null });
-        })
-        .catch((err) => {
-          if (ac.signal.aborted) return;
-          const detail = describeAiError(err);
-          setCard({ info, mode, status: "error", result: null, errorDetail: detail });
-        });
-    },
-    [closeAll, onOpenSettings, uiLang]
-  );
-
-  // ---------- 发起 Wikipedia 名词解释请求 ----------
-
-  const runWiki = useCallback(
-    (info: SelectionInfo) => {
-      abortRef.current?.abort();
-      const ac = new AbortController();
-      abortRef.current = ac;
-      setBubble(null);
-      setCard(null);
-      setWiki({ info, status: "loading", result: null, errorDetail: null });
-      fetchWikipediaSummary(info.text, wikiLang(uiLang), ac.signal)
-        .then((result) => {
-          if (ac.signal.aborted) return;
-          setWiki({ info, status: "done", result, errorDetail: null });
-        })
-        .catch((err) => {
-          if (ac.signal.aborted) return;
-          const detail =
-            err instanceof Error && err.message ? err.message : "network";
-          setWiki({ info, status: "error", result: null, errorDetail: detail });
-        });
-    },
-    [uiLang]
-  );
-
-  /** 用系统默认浏览器打开条目（Tauri opener 插件；非 Tauri 环境回退 window.open） */
-  const handleOpenWiki = useCallback(async () => {
-    const url = wikiRef.current?.result?.url;
-    if (!url) return;
-    try {
-      await openUrl(url);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  }, []);
-
-  // ---------- 模型切换（结果卡片头部下拉） ----------
-
-  const config = loadAiConfig();
-  const activeProfile = getActiveProfile(config);
-
-  /** 切换选用档案并立即用新模型重新翻译 */
-  const switchModel = useCallback(
-    (id: string) => {
-      setMenuOpen(false);
-      const cfg = loadAiConfig();
-      if (cfg.activeId === id) return;
-      saveAiConfig({ ...cfg, activeId: id });
-      const cur = cardRef.current;
-      if (cur) runTranslate(cur.info, cur.mode);
-    },
-    [runTranslate]
-  );
-
-  // 下拉菜单点击外部关闭
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [menuOpen]);
+  }, [engine.closeAll]);
 
   // ---------- 选区监听 ----------
 
@@ -293,12 +130,27 @@ export default function TranslatePopup({
 
     const onPointerUp = (e: PointerEvent) => {
       if (inPopup(e.target)) return;
-      // 卡片/Wikipedia 弹层打开时点击外部 → 收起整个弹层
-      if (cardRef.current || wikiRef.current) {
+      // 卡片/Wikipedia 弹层打开时点击外部 → 收起整个浮动弹层
+      if (floatingCardRef.current || floatingWikiRef.current) {
         closeAll();
         return;
       }
       const info = readSelection();
+      if (!info) {
+        lastSelRef.current = "";
+        return;
+      }
+      // 仅对「新选区」路由到面板：避免面板内点击（如切换模型按钮）因选区仍在
+      // 而反复触发重新翻译/查询（表现为「闪烁重新加载」）
+      const isNewSelection = info.text !== lastSelRef.current;
+      if (isNewSelection) {
+        if (rightPanel.open && rightPanel.tab === "translate") {
+          engine.runTranslate(info, detectMode(info.text));
+        } else if (rightPanel.open && rightPanel.tab === "wikipedia") {
+          engine.runWiki(info);
+        }
+      }
+      lastSelRef.current = info.text;
       setBubble(info);
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -313,7 +165,8 @@ export default function TranslatePopup({
     };
     // 滚动不再收起弹层（保持翻译结果可见）；仅窗口缩放后选区矩形失效才收起
     const onResize = () => {
-      if (cardRef.current || bubbleRef.current || wikiRef.current) closeAll();
+      if (floatingCardRef.current || bubbleRef.current || floatingWikiRef.current)
+        closeAll();
     };
     // 滚动页面：气泡 fixed 定位跟随选区，滚动后选区矩形失效 → 收起气泡；
     // 已打开的结果卡片保持可见（用户既定行为）；弹层内部滚动（卡片内容）不触发
@@ -326,7 +179,9 @@ export default function TranslatePopup({
     const onSelectionChange = () => {
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed && selection.rangeCount > 0) return;
-      if (bubbleRef.current && !cardRef.current) setBubble(null);
+      // 选区已折叠 → 旧选区签名作废，下次重新划词才算「新选区」
+      lastSelRef.current = "";
+      if (bubbleRef.current && !floatingCardRef.current) setBubble(null);
     };
 
     document.addEventListener("pointerup", onPointerUp);
@@ -341,7 +196,7 @@ export default function TranslatePopup({
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
-  }, [closeAll, readSelection]);
+  }, [closeAll, readSelection, engine.runTranslate, engine.runWiki, rightPanel.open, rightPanel.tab]);
 
   // 划词快捷键：选中 PDF 文本后按 T 触发 AI 翻译、按 W 搜索 Wikipedia
   useEffect(() => {
@@ -362,46 +217,28 @@ export default function TranslatePopup({
       const info = bubbleRef.current ?? readSelection();
       if (!info) return;
       e.preventDefault();
-      if (key === "t") runTranslate(info, detectMode(info.text));
-      else runWiki(info);
+      // 路由交给引擎：面板开在对应 tab 时结果直接进面板
+      if (key === "t") engine.runTranslate(info, detectMode(info.text));
+      else engine.runWiki(info);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [runTranslate, runWiki, readSelection]);
+  }, [engine.runTranslate, engine.runWiki, readSelection]);
 
-// 组件卸载时中止进行中的请求
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // 组件卸载时中止进行中的请求（依赖稳定的 engine.closeAll，避免每帧重渲染触发清理而清空卡片）
+  useEffect(() => () => engine.closeAll(), [engine.closeAll]);
 
   // ---------- 渲染 ----------
 
-  const cardStyle = card ? cardPosition(card.info.rect) : null;
+  const hideTranslateBtn = rightPanel.open && rightPanel.tab === "translate";
+  const hideWikiBtn = rightPanel.open && rightPanel.tab === "wikipedia";
 
-  const errorText = (() => {
-    if (!card?.errorDetail) return "";
-    const d = card.errorDetail;
-    if (d === "network") return t("aiErrorNetwork");
-    if (d === "empty") return t("aiErrorEmpty");
-    if (d === "no-model") return t("aiErrorNoModel");
-    if (d.startsWith("http:401") || d.startsWith("http:403")) return t("aiErrorAuth");
-    if (d.startsWith("http:404")) return t("aiErrorNotFound");
-    if (d.startsWith("http:429")) return t("aiErrorRateLimit");
-    if (d.startsWith("http:")) return `${t("aiErrorHttp")} ${d.slice(5)}`;
-    return d;
-  })();
-
-  const wikiErrorText = (() => {
-    if (!wiki?.errorDetail) return "";
-    const d = wiki.errorDetail;
-    if (d === "not-found") return t("wikiNotFound");
-    if (d === "empty") return t("wikiEmpty");
-    if (d === "network") return t("aiErrorNetwork");
-    if (d.startsWith("http:")) return `${t("aiErrorHttp")} ${d.slice(5)}`;
-    return d;
-  })();
+  const floatingCard = engine.floatingCard;
+  const floatingWiki = engine.floatingWiki;
 
   return (
     <div ref={popupRef}>
-      {bubble && !card && !wiki && (
+      {bubble && !floatingCard && !floatingWiki && (
         <div
           className="tr-bubble-group"
           style={bubblePosition(bubble.rect)}
@@ -419,230 +256,50 @@ export default function TranslatePopup({
             <CopyIcon size={13} />
             <span>{t("copy")}</span>
           </button>
-          <button
-            type="button"
-            className="tr-bubble"
-            onClick={() => runTranslate(bubble, detectMode(bubble.text))}
-          >
-            <LanguagesIcon size={13} />
-            <span>{t("aiTranslate")}</span>
-          </button>
-          <button
-            type="button"
-            className="tr-bubble"
-            onClick={() => runWiki(bubble)}
-          >
-            <GlobeIcon size={13} />
-            <span>Wikipedia</span>
-          </button>
+          {!hideTranslateBtn && (
+            <button
+              type="button"
+              className="tr-bubble"
+              onClick={() => engine.runTranslate(bubble, detectMode(bubble.text))}
+            >
+              <LanguagesIcon size={13} />
+              <span>{t("aiTranslate")}</span>
+            </button>
+          )}
+          {!hideWikiBtn && (
+            <button
+              type="button"
+              className="tr-bubble"
+              onClick={() => engine.runWiki(bubble)}
+            >
+              <GlobeIcon size={13} />
+              <span>Wikipedia</span>
+            </button>
+          )}
         </div>
       )}
 
-      {card && cardStyle && (
-        <div
-          className="tr-card"
-          style={{
-            left: cardStyle.left,
-            top: cardStyle.top,
-            maxHeight: cardStyle.maxHeight,
-          }}
-          role="dialog"
-          aria-label={t("aiTranslate")}
-        >
-          <div className="tr-card-header">
-            <div className="tr-mode-switch">
-              <button
-                type="button"
-                className={`tr-mode-btn ${card.mode === "word" ? "is-active" : ""}`}
-                onClick={() => runTranslate(card.info, "word")}
-              >
-                {t("aiModeWord")}
-              </button>
-              <button
-                type="button"
-                className={`tr-mode-btn ${card.mode === "sentence" ? "is-active" : ""}`}
-                onClick={() => runTranslate(card.info, "sentence")}
-              >
-                {t("aiModeSentence")}
-              </button>
-            </div>
-            <div className="tr-spacer" />
-            {activeProfile && (
-              <div className="tr-chip-wrap" ref={menuRef}>
-                <button
-                  type="button"
-                  className="tr-model-chip"
-                  onClick={() => setMenuOpen((v) => !v)}
-                  title={t("aiSwitchModel")}
-                >
-                  <span>{activeProfile.name}</span>
-                  <ChevronDownIcon size={12} />
-                </button>
-                {menuOpen && (
-                  <div className="tr-model-menu" role="menu">
-                    {config.profiles.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className={`tr-model-menu-item ${p.id === activeProfile.id ? "is-active" : ""}`}
-                        role="menuitem"
-                        onClick={() => switchModel(p.id)}
-                      >
-                        <span className="tr-model-dot" aria-hidden="true" />
-                        <span className="tr-profile-name">{p.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              className="tr-close"
-              onClick={closeAll}
-              aria-label={t("aiClose")}
-            >
-              <XIcon size={14} />
-            </button>
-          </div>
-
-          <div className="tr-card-body">
-            {card.status === "loading" && (
-              <div className="tr-loading">
-                <span className="spinner" />
-                <span>{t("aiLoading")}</span>
-              </div>
-            )}
-
-            {card.status === "error" && (
-              <div className="tr-error">
-                <p>{errorText || t("aiErrorRequest")}</p>
-                <button
-                  type="button"
-                  className="tr-retry"
-                  onClick={() => runTranslate(card.info, card.mode)}
-                >
-                  {t("aiRetry")}
-                </button>
-              </div>
-            )}
-
-            {card.status === "done" && card.result && (
-              <>
-                {card.result.mode === "sentence" ? (
-                  card.result.translation !== undefined ? (
-                    <>
-                      <p className="tr-original">{card.info.text}</p>
-                      <p className="tr-translation">{card.result.translation}</p>
-                    </>
-                  ) : (
-                    <p className="tr-raw">{card.result.raw}</p>
-                  )
-                ) : (
-                  <>
-                    <div className="tr-word-head">
-                      <span className="tr-word">{card.result.query ?? card.info.text}</span>
-                    </div>
-                    {card.result.contextMeaning && (
-                      <section className="tr-section">
-                        <h4>{t("aiInContext")}</h4>
-                        <p className="tr-context-meaning">{card.result.contextMeaning}</p>
-                      </section>
-                    )}
-                    {card.result.senses && card.result.senses.length > 0 && (
-                      <section className="tr-section">
-                        <h4>{t("aiSenses")}</h4>
-                        <ul className="tr-senses">
-                          {card.result.senses.map((sense, i) => (
-                            <li key={i}>
-                              {sense.pos && <span className="tr-pos">{sense.pos}</span>}
-                              <span>{sense.meaning}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )}
-                    {!card.result.contextMeaning &&
-                      (!card.result.senses || card.result.senses.length === 0) && (
-                        <p className="tr-raw">{card.result.raw}</p>
-                      )}
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+      {floatingCard && (
+        <TranslateCardView
+          card={floatingCard}
+          variant="floating"
+          onModeChange={(mode) =>
+            engine.runTranslate(floatingCard.info, mode, "floating")
+          }
+          onRetry={() => engine.retryTranslate()}
+          onClose={() => engine.closeFloatingCard()}
+          onSwitchModel={(id) => engine.switchModel(id)}
+        />
       )}
 
-      {wiki && (
-        <div
-          className="tr-card"
-          style={cardPosition(wiki.info.rect)}
-          role="dialog"
-          aria-label="Wikipedia"
-        >
-          <div className="tr-card-header">
-            {wiki.status === "done" && wiki.result && (
-              <h3 className="tr-wiki-head-title" title={wiki.result.title}>
-                {wiki.result.title}
-              </h3>
-            )}
-            <div className="tr-spacer" />
-            <button
-              type="button"
-              className="tr-close"
-              onClick={closeAll}
-              aria-label={t("aiClose")}
-            >
-              <XIcon size={14} />
-            </button>
-          </div>
-
-          <div className="tr-card-body">
-            {wiki.status === "loading" && (
-              <div className="tr-loading">
-                <span className="spinner" />
-                <span>{t("wikiLoading")}</span>
-              </div>
-            )}
-
-            {wiki.status === "error" && (
-              <div className="tr-error">
-                <p>{wikiErrorText || t("aiErrorRequest")}</p>
-                <button
-                  type="button"
-                  className="tr-retry"
-                  onClick={() => runWiki(wiki.info)}
-                >
-                  {t("aiRetry")}
-                </button>
-              </div>
-            )}
-
-            {wiki.status === "done" && wiki.result && (
-              <div className="tr-wiki-content">
-                {wiki.result.thumbnail && (
-                  <img
-                    className="tr-wiki-thumb"
-                    src={wiki.result.thumbnail}
-                    alt=""
-                  />
-                )}
-                <p className="tr-wiki-extract">{wiki.result.extract}</p>
-                <div className="tr-wiki-actions">
-                  <button
-                    type="button"
-                    className="tr-wiki-link"
-                    onClick={handleOpenWiki}
-                  >
-                    {t("wikiOpen")}
-                  </button>
-                  <p className="tr-wiki-license">{wiki.result.license}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {floatingWiki && (
+        <WikiCardView
+          wiki={floatingWiki}
+          variant="floating"
+          onRetry={() => engine.retryWiki()}
+          onClose={() => engine.closeFloatingWiki()}
+          onOpenLink={() => engine.handleOpenWiki()}
+        />
       )}
     </div>
   );

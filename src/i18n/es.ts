@@ -131,4 +131,7 @@ export const es: Record<LangKeys, string> = {
   shortcutWikipedia: "Buscar en Wikipedia",
   shortcutHelp: "Mostrar esta ayuda",
   shortcutSelectionHint: "Tras seleccionar texto",
+  aiSidebar: "Panel de IA",
+  panelEmptyTranslate: "Selecciona texto del PDF para ver la traducción de IA aquí",
+  panelEmptyWikipedia: "Selecciona texto del PDF para consultar Wikipedia aquí",
 };

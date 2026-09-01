@@ -131,6 +131,9 @@ export const zh = {
   shortcutWikipedia: "Wikipedia 搜索",
   shortcutHelp: "显示本帮助",
   shortcutSelectionHint: "选中文本后可用",
+  aiSidebar: "AI 侧边栏",
+  panelEmptyTranslate: "选中 PDF 文本后，在此查看 AI 翻译结果",
+  panelEmptyWikipedia: "选中 PDF 文本后，在此查看 Wikipedia 解释",
 };
 
 export type LangKeys = keyof typeof zh;

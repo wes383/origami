@@ -131,4 +131,7 @@ export const ru: Record<LangKeys, string> = {
   shortcutWikipedia: "Искать в Википедии",
   shortcutHelp: "Показать эту справку",
   shortcutSelectionHint: "После выделения текста",
+  aiSidebar: "Боковая панель ИИ",
+  panelEmptyTranslate: "Выделите текст PDF, чтобы увидеть здесь ИИ-перевод",
+  panelEmptyWikipedia: "Выделите текст PDF, чтобы открыть здесь Wikipedia",
 };

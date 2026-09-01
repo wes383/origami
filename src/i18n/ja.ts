@@ -131,4 +131,7 @@ export const ja: Record<LangKeys, string> = {
   shortcutWikipedia: "Wikipedia で検索",
   shortcutHelp: "このヘルプを表示",
   shortcutSelectionHint: "テキストを選択後",
+  aiSidebar: "AI サイドバー",
+  panelEmptyTranslate: "PDF テキストを選択すると、AI 翻訳がここに表示されます",
+  panelEmptyWikipedia: "PDF テキストを選択すると、Wikipedia の説明がここに表示されます",
 };

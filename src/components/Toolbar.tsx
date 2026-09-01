@@ -94,6 +94,10 @@ interface ToolbarProps {
   sidebarTab: SidebarTab;
   /** 切换侧边栏（同标签页重复点击则收起） */
   onToggleSidebar: (tab: SidebarTab) => void;
+  /** 右侧 AI 面板是否展开 */
+  rightPanelOpen: boolean;
+  /** 切换右侧 AI 面板 */
+  onToggleRightPanel: () => void;
   disabled: boolean;
 }
 
@@ -129,6 +133,8 @@ export default function Toolbar({
   sidebarOpen,
   sidebarTab,
   onToggleSidebar,
+  rightPanelOpen,
+  onToggleRightPanel,
   disabled,
 }: ToolbarProps) {
   const { t, lang, setLang } = useI18n();
@@ -492,6 +498,26 @@ export default function Toolbar({
                     <GridIcon />
                     <span>{t("thumbnails")}</span>
                     {sidebarOpen && sidebarTab === "thumbnails" && (
+                      <span className="tb-item-check">
+                        <CheckIcon size={14} />
+                      </span>
+                    )}
+                  </button>
+
+                  {/* 右侧 AI 面板开关 */}
+                  <button
+                    type="button"
+                    className={`tb-dropdown-item ${rightPanelOpen ? "is-active" : ""}`}
+                    role="menuitemcheckbox"
+                    aria-checked={rightPanelOpen}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onToggleRightPanel();
+                    }}
+                  >
+                    <LanguagesIcon />
+                    <span>{t("aiSidebar")}</span>
+                    {rightPanelOpen && (
                       <span className="tb-item-check">
                         <CheckIcon size={14} />
                       </span>
@@ -864,6 +890,17 @@ export default function Toolbar({
               aria-label={t("search")}
             >
               <SearchIcon />
+            </button>
+            <span className="tb-separator" aria-hidden="true" />
+            <button
+              type="button"
+              className={`tb-btn icon-only ${rightPanelOpen ? "is-active" : ""}`}
+              onClick={onToggleRightPanel}
+              title={t("aiSidebar")}
+              aria-label={t("aiSidebar")}
+              aria-pressed={rightPanelOpen}
+            >
+              <LanguagesIcon />
             </button>
           </>
         )}
