@@ -1124,6 +1124,21 @@ button:disabled {
   color-scheme: only light;
 }
 
+/* TextLayer 的文本坐标始终以 PDF 原始方向生成；pdf.js 在容器上写入
+   data-main-rotation 标记。页面旋转时需像官方 viewer 一样旋转整个文本层，
+   才能与已旋转的 canvas 保持同一坐标系并正确命中、选择文字。 */
+.pdf-text-layer[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+
+.pdf-text-layer[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+
+.pdf-text-layer[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
+
 .pdf-text-layer :is(span, br) {
   color: transparent;
   position: absolute;
