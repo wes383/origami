@@ -2,6 +2,8 @@ import type { LangKeys } from "./zh";
 
 export const fr: Record<LangKeys, string> = {
   docTitle: "Origami",
+  fullscreen: "Plein écran",
+  shortcutFullscreen: "Basculer en plein écran",
   openDropHint: "Ou glissez un fichier PDF ici pour l'ouvrir",
   openPdf: "Ouvrir un PDF",
   prevPage: "Page précédente",

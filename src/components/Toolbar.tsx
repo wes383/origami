@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useI18n, UI_LANGS } from "../i18n";
 import type { ThemePref } from "../hooks/useTheme";
 import type { PageLayout, FlipMode } from "./PdfViewer";
@@ -11,6 +12,8 @@ import {
   FitWidthIcon,
   GridIcon,
   KeyboardIcon,
+  FullscreenIcon,
+  FullscreenExitIcon,
   LanguagesIcon,
   ListIcon,
   MinusIcon,
@@ -58,6 +61,10 @@ interface ToolbarProps {
   onOpenAiSettings: () => void;
   /** 打开快捷键帮助面板 */
   onShowShortcuts: () => void;
+  /** 当前是否处于全屏 */
+  isFullscreen: boolean;
+  /** 切换全屏 */
+  onToggleFullscreen: () => void;
   /** 打开全文查找 */
   onOpenSearch: () => void;
   /** 当前文档是否含目录 */
@@ -96,6 +103,8 @@ export default function Toolbar({
   onCloseFile,
   onOpenAiSettings,
   onShowShortcuts,
+  isFullscreen,
+  onToggleFullscreen,
   onOpenSearch,
   outlineAvailable,
   sidebarOpen,
@@ -108,9 +117,10 @@ export default function Toolbar({
   const [zoomInput, setZoomInput] = useState(String(Math.round(effScale * 100)));
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  /** 语言二级菜单（向右 flyout） */
+  /** 语言二级菜单（向右 flyout，portal 到 body 避免被下拉菜单的滚动裁切） */
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const langWrapRef = useRef<HTMLDivElement | null>(null);
+  const langMenuDomRef = useRef<HTMLDivElement | null>(null);
   /** ≤560px 时工具栏缩放控件隐藏，改由设置菜单提供 */
   const [narrow, setNarrow] = useState(
     () => window.innerWidth <= ZOOM_HIDDEN_BELOW
@@ -149,16 +159,24 @@ export default function Toolbar({
     };
   }, [menuOpen]);
 
-  // 语言二级菜单：点击其外部（含设置菜单内其他区域）即关闭
+  // 语言二级菜单：点击其外部（含设置菜单内其他区域、portal 后的菜单本体）即关闭；
+  // 窗口缩放或下拉菜单滚动时位置会错位，直接收起
   useEffect(() => {
     if (!langMenuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (!langWrapRef.current?.contains(e.target as Node))
+      if (
+        !langWrapRef.current?.contains(e.target as Node) &&
+        !langMenuDomRef.current?.contains(e.target as Node)
+      )
         setLangMenuOpen(false);
     };
+    const onDismiss = () => setLangMenuOpen(false);
     document.addEventListener("pointerdown", onPointerDown);
-    return () =>
+    window.addEventListener("resize", onDismiss);
+    return () => {
       document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("resize", onDismiss);
+    };
   }, [langMenuOpen]);
 
   const commitPageInput = () => {
@@ -212,7 +230,11 @@ export default function Toolbar({
           </button>
 
           {menuOpen && (
-            <div className="tb-dropdown tb-dropdown-left" role="menu">
+            <div
+              className="tb-dropdown tb-dropdown-left"
+              role="menu"
+              onScroll={() => setLangMenuOpen(false)}
+            >
               <button
                 type="button"
                 className="tb-dropdown-item"
@@ -304,6 +326,21 @@ export default function Toolbar({
 
                   <div className="tb-dropdown-separator" />
                 </>
+              )}
+
+              {!disabled && (
+                <button
+                  type="button"
+                  className="tb-dropdown-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onToggleFullscreen();
+                  }}
+                >
+                  {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                  <span>{t("fullscreen")}</span>
+                </button>
               )}
 
               {!disabled && (
@@ -426,27 +463,52 @@ export default function Toolbar({
                   </span>
                   <ChevronRightIcon size={12} />
                 </button>
-                {langMenuOpen && (
-                  <div className="tb-lang-menu" role="menu">
-                    {UI_LANGS.map((l) => (
-                      <button
-                        key={l.id}
-                        type="button"
-                        className={`tb-lang-item ${lang === l.id ? "is-active" : ""}`}
-                        role="menuitemradio"
-                        aria-checked={lang === l.id}
-                        onClick={() => {
-                          switchLang(l.id);
-                          setLangMenuOpen(false);
-                        }}
-                      >
-                        <span className="tb-lang-dot" aria-hidden="true" />
-                        <span className="tb-lang-name">{l.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
+
+              {/* 语言二级菜单 portal 到 body：固定定位，向右飞出，
+                  避免被设置了 overflow 滚动的下拉容器裁切 */}
+              {langMenuOpen &&
+                langWrapRef.current &&
+                createPortal(
+                  (() => {
+                    const rect =
+                      langWrapRef.current!.getBoundingClientRect();
+                    const menuH = UI_LANGS.length * 30 + 8;
+                    const top = Math.min(
+                      rect.top,
+                      Math.max(8, window.innerHeight - 8 - menuH)
+                    );
+                    const left = rect.right + 6;
+                    return (
+                      <div
+                        className="tb-lang-menu tb-lang-menu-fixed"
+                        ref={langMenuDomRef}
+                        role="menu"
+                        style={{ top, left }}
+                      >
+                        {UI_LANGS.map((l) => (
+                          <button
+                            key={l.id}
+                            type="button"
+                            className={`tb-lang-item ${
+                              lang === l.id ? "is-active" : ""
+                            }`}
+                            role="menuitemradio"
+                            aria-checked={lang === l.id}
+                            onClick={() => {
+                              switchLang(l.id);
+                              setLangMenuOpen(false);
+                            }}
+                          >
+                            <span className="tb-lang-dot" aria-hidden="true" />
+                            <span className="tb-lang-name">{l.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })(),
+                  document.body
+                )}
 
               <div className="tb-dropdown-label">{t("theme")}</div>
               <div className="tb-dropdown-row">

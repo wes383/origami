@@ -39,6 +39,9 @@
   --red-soft: #fef2f2;
   --red-border: #fecaca;
 
+  /* ── 布局尺寸 ── */
+  --toolbar-h: 52px;
+
   /* ── 圆角 tokens ── */
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -541,7 +544,7 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  height: 52px;
+  height: var(--toolbar-h);
   /* 左右 padding 对称：1fr auto 1fr 三列网格下，中间列才能严格居中于窗口。
      窗口控制按钮的留位在 ≤900px 断点处理（该断点下中间组已左对齐，不受影响） */
   padding-inline: 12px;
@@ -770,12 +773,39 @@ button:disabled {
   right: 0;
   z-index: 50;
   min-width: 240px;
+  /* 菜单高度超过可用空间时收缩并出现滚动条，底部贴齐界面底部
+     （top 距视口顶 = 工具栏高 + 8px 间距；max-height 留出该距离 + 8px 底边距，与顶部间距对称） */
+  max-height: calc(100vh - var(--toolbar-h) - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-md);
   animation: dropdown-in var(--duration-base) var(--ease-out);
+  scrollbar-width: thin;
+  scrollbar-color: var(--hover-bg-strong) transparent;
+}
+
+.tb-dropdown::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.tb-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tb-dropdown::-webkit-scrollbar-thumb {
+  background: var(--hover-bg-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.tb-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-subtle);
 }
 
 /* 菜单按钮在左侧时，下拉向左展开 */
@@ -910,6 +940,13 @@ button:disabled {
   background: var(--surface);
   box-shadow: var(--shadow-md);
   animation: dropdown-in var(--duration-base) var(--ease-out);
+}
+
+/* portal 到 body 后的固定定位版本（下拉菜单可滚动时不被裁切） */
+.tb-lang-menu-fixed {
+  position: fixed;
+  z-index: 120;
+  max-height: calc(100vh - 16px);
 }
 
 .tb-lang-item {

@@ -25,6 +25,7 @@ const ROWS: Row[] = [
   { keys: "F", descKey: "shortcutFit" },
   { keys: "T", descKey: "aiTranslate", selection: true },
   { keys: "W", descKey: "shortcutWikipedia", selection: true },
+  { keys: "F11", descKey: "shortcutFullscreen" },
   { keys: "?", descKey: "shortcutHelp" },
 ];
 

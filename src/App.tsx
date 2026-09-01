@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -97,6 +98,8 @@ export default function App() {
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   /** 快捷键帮助面板 */
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** 全屏模式（Tauri 原生窗口全屏） */
+  const [isFullscreen, setIsFullscreen] = useState(false);
   /** 当前文档的目录树 */
   const [outline, setOutline] = useState<OutlineNode[]>([]);
   /** 侧边栏展开状态 */
@@ -123,6 +126,26 @@ export default function App() {
     const onChange = (e: MediaQueryListEvent) => setNarrowWindow(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // ---------- 全屏（Tauri 原生窗口全屏） ----------
+  /** 切换全屏：读取真实状态 → 反置 → 再读真实状态回写，保证图标同步 */
+  const toggleFullscreen = useCallback(() => {
+    const win = getCurrentWindow();
+    win
+      .isFullscreen()
+      .then((fs) => win.setFullscreen(!fs))
+      .then(() => win.isFullscreen())
+      .then(setIsFullscreen)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // 初始化一次真实状态（该 Tauri 版本无 onFullscreenChanged，切换均由 toggleFullscreen 读取真实状态）
+    getCurrentWindow()
+      .isFullscreen()
+      .then(setIsFullscreen)
+      .catch(() => {});
   }, []);
 
   const effScale =
@@ -669,6 +692,13 @@ export default function App() {
         return;
       }
 
+      // F11 切换全屏（窗口级功能，无需文档）
+      if (e.key === "F11") {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
       if (!pdf) return; // 以下需已打开文档
       const key = e.key.toLowerCase();
       if (key === "r") {
@@ -691,6 +721,7 @@ export default function App() {
     setZoomExact,
     rotateClockwise,
     toggleFit,
+    toggleFullscreen,
   ]);
 
   // ---------- 错误提示自动消失 ----------
@@ -728,6 +759,8 @@ export default function App() {
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
         onShowShortcuts={() => setShortcutsOpen(true)}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
         onOpenSearch={() => setSearchOpen(true)}
         outlineAvailable={outline.length > 0}
         sidebarOpen={sidebarOpen}
