@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useI18n, type Lang } from "../i18n";
+import { useI18n, UI_LANGS } from "../i18n";
 import type { ThemePref } from "../hooks/useTheme";
 import type { ViewMode } from "./PdfViewer";
 import {
@@ -72,6 +72,9 @@ export default function Toolbar({
   const [zoomInput, setZoomInput] = useState(String(Math.round(effScale * 100)));
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  /** 语言二级菜单（向右 flyout） */
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const langWrapRef = useRef<HTMLDivElement | null>(null);
   /** ≤560px 时工具栏缩放控件隐藏，改由设置菜单提供 */
   const [narrow, setNarrow] = useState(
     () => window.innerWidth <= ZOOM_HIDDEN_BELOW
@@ -110,6 +113,18 @@ export default function Toolbar({
     };
   }, [menuOpen]);
 
+  // 语言二级菜单：点击其外部（含设置菜单内其他区域）即关闭
+  useEffect(() => {
+    if (!langMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!langWrapRef.current?.contains(e.target as Node))
+        setLangMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown);
+  }, [langMenuOpen]);
+
   const commitPageInput = () => {
     const n = parseInt(pageInput, 10);
     if (!Number.isNaN(n) && n >= 1 && n <= numPages) {
@@ -135,7 +150,7 @@ export default function Toolbar({
   const prevDisabled = disabled || currentPage <= 1;
   const nextDisabled = disabled || currentPage >= numPages;
 
-  const switchLang = (next: Lang) => setLang(next);
+  const switchLang = (next: (typeof UI_LANGS)[number]["id"]) => setLang(next);
 
   return (
     // data-tauri-drag-region 使工具栏空白区域可作为窗口拖拽区（子元素交互不受影响）；
@@ -275,25 +290,39 @@ export default function Toolbar({
               <div className="tb-dropdown-separator" />
 
               <div className="tb-dropdown-label">{t("language")}</div>
-              <div className="tb-dropdown-row">
+              <div className="tb-lang-wrap" ref={langWrapRef}>
                 <button
                   type="button"
-                  className={`tb-dropdown-choice ${lang === "zh" ? "is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={lang === "zh"}
-                  onClick={() => switchLang("zh")}
+                  className="tb-lang-trigger"
+                  onClick={() => setLangMenuOpen((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={langMenuOpen}
                 >
-                  中文
+                  <span>
+                    {UI_LANGS.find((l) => l.id === lang)?.label ?? lang}
+                  </span>
+                  <ChevronRightIcon size={12} />
                 </button>
-                <button
-                  type="button"
-                  className={`tb-dropdown-choice ${lang === "en" ? "is-active" : ""}`}
-                  role="menuitemradio"
-                  aria-checked={lang === "en"}
-                  onClick={() => switchLang("en")}
-                >
-                  English
-                </button>
+                {langMenuOpen && (
+                  <div className="tb-lang-menu" role="menu">
+                    {UI_LANGS.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        className={`tb-lang-item ${lang === l.id ? "is-active" : ""}`}
+                        role="menuitemradio"
+                        aria-checked={lang === l.id}
+                        onClick={() => {
+                          switchLang(l.id);
+                          setLangMenuOpen(false);
+                        }}
+                      >
+                        <span className="tb-lang-dot" aria-hidden="true" />
+                        <span className="tb-lang-name">{l.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="tb-dropdown-separator" />

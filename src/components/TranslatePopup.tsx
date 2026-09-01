@@ -3,7 +3,8 @@
  *
  * 交互流程：用户在 PDF 文本层选中内容 → 选区末端浮现「AI 翻译」气泡 →
  * 点击后请求 AI 并展示结果卡片。卡片头部可手动切换「词语释义 / 整句翻译」
- * 模式重新请求（启发式判定误判时的兜底）。
+ * 模式重新请求（启发式判定误判时的兜底），也可切换当前模型档案。
+ * 翻译目标语言在 AI 设置弹窗里配置（见 AiSettingsModal），这里读取即可。
  *
  * 上下文：取选区所在文本层（.pdf-text-layer）的整页文字，以选区为中心
  * 截取窗口后一并送给 AI，由其定位该词在文中的确切含义。
@@ -18,7 +19,9 @@ import {
   getActiveProfile,
   isAiConfigured,
   loadAiConfig,
+  loadTargetLang,
   saveAiConfig,
+  TARGET_AUTO,
   translateSelection,
   type TranslateMode,
   type TranslateResult,
@@ -42,6 +45,26 @@ type CardState = {
 
 const CARD_WIDTH = 380;
 
+/** 气泡按钮估算尺寸（水平 clamp 用，实际宽度随文案略有出入） */
+const BUBBLE_W = 120;
+const BUBBLE_H = 30;
+
+/** 气泡定位：优先选区下方，底部空间不足时翻到选区上方；水平 clamp 到视口内 */
+function bubblePosition(rect: SelectionInfo["rect"]) {
+  const margin = 8;
+  const cx = rect.x + rect.w / 2;
+  const left = Math.max(
+    BUBBLE_W / 2 + margin,
+    Math.min(cx, window.innerWidth - BUBBLE_W / 2 - margin)
+  );
+  const below = rect.y + rect.h + margin;
+  const top =
+    below + BUBBLE_H + margin <= window.innerHeight
+      ? below
+      : Math.max(margin, rect.y - BUBBLE_H - margin);
+  return { left, top };
+}
+
 /** 结果卡片定位：优先选区下方，空间不足放上方；水平 clamp 到视口内 */
 function cardPosition(rect: SelectionInfo["rect"]) {
   const margin = 12;
@@ -55,8 +78,11 @@ function cardPosition(rect: SelectionInfo["rect"]) {
     top = below;
     height = Math.min(maxH, window.innerHeight - top - margin);
   } else {
-    top = margin;
-    height = Math.min(maxH, rect.y - margin - 10);
+    // 下方空间不足：卡片放选区上方，底部贴选区上方 10px 展开；
+    // 只有视口高度实在放不下 maxH 时才退回贴顶（top = margin）
+    const above = rect.y - 10;
+    top = Math.max(margin, above - maxH);
+    height = Math.min(maxH, above - margin);
   }
   return { left: x, top, maxHeight: Math.max(160, height) };
 }
@@ -66,7 +92,7 @@ export default function TranslatePopup({
 }: {
   onOpenSettings: () => void;
 }) {
-  const { t, lang } = useI18n();
+  const { t, lang: uiLang } = useI18n();
 
   const [bubble, setBubble] = useState<SelectionInfo | null>(null);
   const [card, setCard] = useState<CardState | null>(null);
@@ -102,12 +128,16 @@ export default function TranslatePopup({
       const ac = new AbortController();
       abortRef.current = ac;
       setCard({ info, mode, status: "loading", result: null, errorDetail: null });
+      // 目标语言在 AI 设置弹窗里配置；「跟随界面语言」时直接解析为当前 UI 语言
+      //（UI 语言 10 种与 TARGET_LANGS 一一对应）
+      const raw = loadTargetLang();
+      const target = raw === TARGET_AUTO ? uiLang : raw;
       translateSelection({
         config,
         text: info.text,
         context: info.context,
         mode,
-        lang,
+        lang: target,
         signal: ac.signal,
       })
         .then((result) => {
@@ -120,7 +150,7 @@ export default function TranslatePopup({
           setCard({ info, mode, status: "error", result: null, errorDetail: detail });
         });
     },
-    [closeAll, lang, onOpenSettings]
+    [closeAll, onOpenSettings, uiLang]
   );
 
   // ---------- 模型切换（结果卡片头部下拉） ----------
@@ -199,24 +229,31 @@ export default function TranslatePopup({
         setBubble(readSelection());
       }
     };
-    // 滚动/缩放后选区矩形失效，直接收起
-    const onScrollOrResize = () => {
+    // 滚动不再收起弹层（保持翻译结果可见）；仅窗口缩放后选区矩形失效才收起
+    const onResize = () => {
       if (cardRef.current || bubbleRef.current) closeAll();
+    };
+    // 单击选中文本内部时，Chromium 要等 mouseup 的默认行为才折叠选区，
+    // pointerup 先读到旧选区导致气泡残留；这里监听选区折叠并兜底收起。
+    const onSelectionChange = () => {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.rangeCount > 0) return;
+      if (bubbleRef.current && !cardRef.current) setBubble(null);
     };
 
     document.addEventListener("pointerup", onPointerUp);
     document.addEventListener("keyup", onKeyUp);
-    document.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize);
+    document.addEventListener("selectionchange", onSelectionChange);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("keyup", onKeyUp);
-      document.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize);
+      document.removeEventListener("selectionchange", onSelectionChange);
+      window.removeEventListener("resize", onResize);
     };
   }, [closeAll, readSelection]);
 
-  // 组件卸载时中止进行中的请求
+// 组件卸载时中止进行中的请求
   useEffect(() => () => abortRef.current?.abort(), []);
 
   // ---------- 渲染 ----------
@@ -242,13 +279,9 @@ export default function TranslatePopup({
         <button
           type="button"
           className="tr-bubble"
-          style={{
-            left: bubble.rect.x + bubble.rect.w / 2,
-            top: bubble.rect.y + bubble.rect.h + 8,
-          }}
+          style={bubblePosition(bubble.rect)}
           onMouseDown={(e) => e.preventDefault() /* 保住选区不被清掉 */}
           onClick={() => runTranslate(bubble, detectMode(bubble.text))}
-          title={t("aiTranslate")}
         >
           <LanguagesIcon size={13} />
           <span>{t("aiTranslate")}</span>
@@ -359,9 +392,6 @@ export default function TranslatePopup({
                   <>
                     <div className="tr-word-head">
                       <span className="tr-word">{card.result.query ?? card.info.text}</span>
-                      {card.result.phonetic && (
-                        <span className="tr-phonetic">{card.result.phonetic}</span>
-                      )}
                     </div>
                     {card.result.contextMeaning && (
                       <section className="tr-section">

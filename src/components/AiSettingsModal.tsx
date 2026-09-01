@@ -6,16 +6,22 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 import {
   describeAiError,
   getActiveProfile,
   loadAiConfig,
+  loadTargetLang,
   saveAiConfig,
+  saveTargetLang,
+  TARGET_AUTO,
+  TARGET_LANGS,
+  targetLangName,
   testAiConnection,
   type AiProfile,
 } from "../lib/aiTranslate";
-import { PencilIcon, PlusIcon, XIcon } from "./Icons";
+import { ChevronDownIcon, PencilIcon, PlusIcon, XIcon } from "./Icons";
 
 type TestStatus = "idle" | "testing" | "ok" | "fail";
 
@@ -47,6 +53,17 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const [formOpen, setFormOpen] = useState(false);
   const [test, setTest] = useState<TestStatus>("idle");
   const [testDetail, setTestDetail] = useState("");
+  /** 翻译目标语言（翻译/释义输出到该语言），选择即持久化 */
+  const [targetLang, setTargetLang] = useState<string>(loadTargetLang);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  /** 菜单 fixed 定位坐标：脱离 modal 滚动容器，避免被 overflow 裁剪 */
+  const [langMenuPos, setLangMenuPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const langMenuRef = useRef<HTMLDivElement | null>(null);
+  /** portal 菜单自身的 ref：外部点击关闭时同时检查菜单内部 */
+  const langMenuDomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -56,6 +73,34 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  // 目标语言下拉菜单：点击外部关闭（菜单 portal 到 body，需同时命中 chip 与菜单自身）
+  useEffect(() => {
+    if (!langMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const inChip = langMenuRef.current?.contains(e.target as Node) ?? false;
+      const inMenu = langMenuDomRef.current?.contains(e.target as Node) ?? false;
+      if (!inChip && !inMenu) setLangMenuOpen(false);
+    };
+    const onScrollOrResize = () => setLangMenuOpen(false);
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [langMenuOpen]);
+
+  /** 打开目标语言菜单：按 chip 视口坐标定位（fixed） */
+  const openLangMenu = () => {
+    const chip = langMenuRef.current?.querySelector(".tr-model-chip");
+    if (!chip) return;
+    const r = chip.getBoundingClientRect();
+    setLangMenuPos({ top: r.bottom + 6, left: r.left });
+    setLangMenuOpen(true);
+  };
 
   useEffect(() => {
     if (formOpen) inputRef.current?.focus();
@@ -95,6 +140,20 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
     setActiveId(id);
     persist(profiles, id);
   };
+
+  /** 切换翻译目标语言：持久化并更新 chip 显示 */
+  const switchLang = (id: string) => {
+    setLangMenuOpen(false);
+    if (id === targetLang) return;
+    saveTargetLang(id);
+    setTargetLang(id);
+  };
+
+  /** 目标语言选项：首项「跟随界面语言」+ 具体语言列表 */
+  const langOptions = [
+    { id: TARGET_AUTO, label: t("aiTargetAuto") },
+    ...TARGET_LANGS.map((l) => ({ id: l.id, label: l.label })),
+  ];
 
   const submitForm = () => {
     if (!formValid) return;
@@ -170,7 +229,7 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
     >
       <div className="tr-modal" role="dialog" aria-label={t("aiSettings")}>
         <header className="tr-modal-head">
-          <h3>{t("aiApiTitle")}</h3>
+          <h3>{t("aiSettings")}</h3>
           <button
             type="button"
             className="tr-modal-close"
@@ -183,6 +242,52 @@ export default function AiSettingsModal({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="tr-form">
+          {/* 翻译目标语言：翻译/释义输出到所选语言（样式与翻译卡片模型切换一致） */}
+          <div className="tr-field">
+            <span>{t("aiTargetLang")}</span>
+            <div className="tr-chip-wrap" ref={langMenuRef}>
+              <button
+                type="button"
+                className="tr-model-chip tr-lang-trigger"
+                onClick={openLangMenu}
+              >
+                <span>
+                  {targetLang === TARGET_AUTO
+                    ? t("aiTargetAuto")
+                    : targetLangName(targetLang)}
+                </span>
+                <ChevronDownIcon size={12} />
+              </button>
+            </div>
+          </div>
+
+          {/* 目标语言下拉菜单：portal 到 body（参照 orkest-ui Select 做法），
+              脱离 modal 的 overflow/transform 上下文，不再被裁剪或错位 */}
+          {langMenuOpen &&
+            langMenuPos &&
+            createPortal(
+              <div
+                className="tr-model-menu tr-menu-fixed"
+                ref={langMenuDomRef}
+                style={{ top: langMenuPos.top, left: langMenuPos.left }}
+                role="menu"
+              >
+                {langOptions.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    className={`tr-model-menu-item ${l.id === targetLang ? "is-active" : ""}`}
+                    role="menuitem"
+                    onClick={() => switchLang(l.id)}
+                  >
+                    <span className="tr-model-dot" aria-hidden="true" />
+                    <span className="tr-profile-name">{l.label}</span>
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
+
           {/* 已保存的模型档案 */}
           <div className="tr-field">
             <span>{t("aiSavedModels")}</span>

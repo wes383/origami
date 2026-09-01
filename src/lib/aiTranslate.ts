@@ -185,8 +185,6 @@ export interface TranslateResult {
   mode: TranslateMode;
   /** 清理后的词头（word 模式） */
   query?: string;
-  /** 音标（word 模式，非英文文本时可能为空） */
-  phonetic?: string | null;
   /** 该词在本文上下文中的含义（word 模式） */
   contextMeaning?: string;
   /** 按词性分组的常见含义（word 模式） */
@@ -199,8 +197,49 @@ export interface TranslateResult {
 
 export class AiRequestError extends Error {}
 
-function targetLangName(lang: "zh" | "en"): string {
-  return lang === "zh" ? "简体中文" : "English";
+/** 可选的目标语言（翻译结果 / 词义解释用该语言输出） */
+export const TARGET_LANGS = [
+  { id: "zh", label: "简体中文" },
+  { id: "en", label: "English" },
+  { id: "ja", label: "日本語" },
+  { id: "ko", label: "한국어" },
+  { id: "fr", label: "Français" },
+  { id: "de", label: "Deutsch" },
+  { id: "es", label: "Español" },
+  { id: "ru", label: "Русский" },
+  { id: "pt", label: "Português" },
+  { id: "it", label: "Italiano" },
+] as const;
+
+export type TargetLangId = (typeof TARGET_LANGS)[number]["id"];
+
+const TARGET_KEY = "pdfreader-target-lang";
+
+/** 特殊值：跟随界面语言（默认）。由调用方解析为当前 UI 语言 */
+export const TARGET_AUTO = "auto";
+
+/** 读取目标语言，默认「跟随界面语言」（与界面语言保持一致） */
+export function loadTargetLang(): string {
+  try {
+    const v = localStorage.getItem(TARGET_KEY);
+    if (v === TARGET_AUTO) return TARGET_AUTO;
+    if (v && TARGET_LANGS.some((l) => l.id === v)) return v;
+  } catch {
+    /* ignore */
+  }
+  return TARGET_AUTO;
+}
+
+export function saveTargetLang(id: string): void {
+  try {
+    localStorage.setItem(TARGET_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function targetLangName(id: string): string {
+  return TARGET_LANGS.find((l) => l.id === id)?.label ?? "简体中文";
 }
 
 function wordSystemPrompt(target: string): string {
@@ -211,9 +250,8 @@ function wordSystemPrompt(target: string): string {
     "1. Locate the selected word/phrase in the context and determine its exact meaning as used there.",
     "2. List all of its common meanings, grouped by part of speech, ordered by frequency (max 8 senses).",
     `Write "contextMeaning" and every "meaning" in ${target}. Keep "pos" concise (e.g. "n.", "v.", "adj.", "短语").`,
-    "If the text is English, also give the IPA phonetic of the headword; otherwise set phonetic to null.",
     "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
-    '{"query": string, "phonetic": string | null, "contextMeaning": string, "senses": [{"pos": string, "meaning": string}]}',
+    '{"query": string, "contextMeaning": string, "senses": [{"pos": string, "meaning": string}]}',
   ].join("\n");
 }
 
@@ -325,7 +363,8 @@ export interface TranslateParams {
   text: string;
   context: string;
   mode: TranslateMode;
-  lang: "zh" | "en";
+  /** 目标语言 id（见 TARGET_LANGS），翻译/释义输出到该语言 */
+  lang: string;
   signal?: AbortSignal;
 }
 
@@ -387,7 +426,6 @@ export async function translateSelection(
   return {
     mode,
     query: pickString(parsed, "query") ?? text,
-    phonetic: pickString(parsed, "phonetic") ?? null,
     contextMeaning: pickString(parsed, "contextMeaning"),
     senses,
   };

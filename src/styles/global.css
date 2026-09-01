@@ -469,6 +469,99 @@ button:disabled {
   padding: 0 6px 6px;
 }
 
+/* 语言选择：触发按钮 + 向右 flyout 二级菜单 */
+.tb-lang-wrap {
+  position: relative;
+  margin: 0 6px 6px;
+}
+
+.tb-lang-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: var(--hover-bg);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--foreground-muted);
+  transition: background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.tb-lang-trigger:hover {
+  background: var(--hover-bg-strong);
+  color: var(--foreground);
+}
+
+.tb-lang-trigger > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5; /* descender 落在行盒内，不被 overflow:hidden 裁掉 */
+  text-align: left;
+}
+
+/* 二级菜单：相对触发按钮向右展开（dropdown 无 overflow 裁剪，可溢出显示） */
+.tb-lang-menu {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 6px);
+  z-index: 60;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: dropdown-in var(--duration-base) var(--ease-out);
+}
+
+.tb-lang-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--foreground);
+  text-align: left;
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.tb-lang-item:hover {
+  background: var(--hover-bg);
+}
+
+.tb-lang-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--foreground-faint);
+  background: transparent;
+}
+
+.tb-lang-item.is-active .tb-lang-dot {
+  border-color: var(--foreground);
+  background: var(--foreground);
+}
+
+.tb-lang-name {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 /* 菜单行内的只读数值（如当前缩放百分比） */
 .tb-dropdown-value {
   display: inline-flex;
@@ -1065,17 +1158,16 @@ button:disabled {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-pop);
-  overflow: hidden;
+  overflow: visible; /* 头部下拉菜单需溢出卡片显示，靠 .tr-card-body 自身裁圆角 */
   animation: dropdown-in var(--duration-base) var(--ease-out);
 }
 
 .tr-card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px; /* 模型切换芯片与关闭按钮之间留出间距 */
+  gap: 5px; /* 模式切换 | spacer | 模型 chip | 关闭 */
   flex-shrink: 0;
-  padding: 8px 8px 0 10px;
+  padding: 8px 6px 0 8px;
 }
 
 .tr-mode-switch {
@@ -1084,6 +1176,7 @@ button:disabled {
   padding: 2px;
   border-radius: var(--radius-full);
   background: var(--hover-bg);
+  flex-shrink: 0; /* 模式切换不让步，文字必须完整显示 */
 }
 
 .tr-mode-btn {
@@ -1091,11 +1184,12 @@ button:disabled {
   align-items: center;
   justify-content: center;
   height: 26px;
-  padding: 0 12px;
+  padding: 0 8px;
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
+  white-space: nowrap; /* 头部紧凑时也保持单行 */
   color: var(--foreground-muted);
   transition: background-color var(--duration-base) var(--ease-out),
     color var(--duration-base) var(--ease-out);
@@ -1131,8 +1225,11 @@ button:disabled {
 .tr-card-body {
   padding: 10px 14px 14px;
   overflow-y: auto;
+  overflow-x: hidden; /* 自身裁底部圆角，避免下拉菜单溢出 */
   font-size: 13.5px;
   line-height: 1.6;
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 /* 加载与错误态 */
@@ -1183,10 +1280,6 @@ button:disabled {
 
 /* 词条模式 */
 .tr-word-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
   margin-bottom: 6px;
 }
 
@@ -1195,12 +1288,6 @@ button:disabled {
   font-size: 17px;
   font-weight: 650;
   color: var(--foreground);
-}
-
-.tr-phonetic {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--foreground-subtle);
 }
 
 .tr-section {
@@ -1347,6 +1434,18 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* 目标语言 chip：宽度收缩到按钮本身，空白区域不参与点击激活 */
+.tr-field > .tr-chip-wrap {
+  align-self: flex-start;
+}
+
+/* 设置弹窗目标语言按钮：比翻译卡片模型 chip 更宽，文字与箭头拉开 */
+.tr-lang-trigger {
+  min-width: 160px;
+  padding: 0 14px;
+  justify-content: space-between;
 }
 
 .tr-field > span {
@@ -1612,7 +1711,8 @@ button:disabled {
 /* 模型切换芯片 + 下拉菜单（结果卡片头部） */
 .tr-chip-wrap {
   position: relative;
-  flex-shrink: 0;
+  flex-shrink: 1; /* 头部空间不足时允许芯片收缩，文本走 ellipsis */
+  min-width: 0;
 }
 
 .tr-model-chip {
@@ -1620,7 +1720,7 @@ button:disabled {
   align-items: center;
   gap: 4px;
   height: 26px;
-  max-width: 150px;
+  max-width: 130px;
   padding: 0 8px;
   border-radius: var(--radius-full);
   background: var(--hover-bg);
@@ -1641,6 +1741,17 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.5; /* 同菜单项修复：行盒加高，descender 落在盒内，不被 overflow:hidden 裁掉 */
+}
+
+/* 设置弹窗内 fixed 定位的下拉菜单：脱离 modal 滚动容器，不被 overflow 裁剪；
+   坐标由 chip 视口位置计算（见 AiSettingsModal openLangMenu） */
+.tr-menu-fixed {
+  position: fixed;
+  z-index: 120; /* 高于 modal overlay(90)，盖在弹窗之上 */
+  right: auto; /* 覆盖 .tr-model-menu 的 right:0，只由内联 left 定位 */
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
 }
 
 .tr-model-menu {
@@ -1667,6 +1778,7 @@ button:disabled {
   padding: 0 8px;
   border-radius: var(--radius-sm);
   font-size: 12px;
+  line-height: 1.5; /* 显式声明，避免继承异常裁掉 descender */
   color: var(--foreground);
   text-align: left;
   transition: background-color var(--duration-base) var(--ease-out);
@@ -1682,9 +1794,14 @@ button:disabled {
 }
 
 .tr-model-menu-item .tr-profile-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: block; /* blockify 后行高跟随按钮 */
+  min-width: 0;
   white-space: nowrap;
+  /* 关键：基础规则 .tr-profile-name 有 overflow:hidden + line-height:1，
+     不显式重置会按属性逐条继承生效，仍会裁掉 g/j/y 的 descender */
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
 }
 
 /* 添加/编辑模型表单区：标题 + 带标签字段组 */
