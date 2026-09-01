@@ -15,7 +15,7 @@ import {
   type RecentFile,
 } from "./lib/recent";
 import Toolbar from "./components/Toolbar";
-import PdfViewer, { type ViewMode } from "./components/PdfViewer";
+import PdfViewer, { type PageLayout, type FlipMode } from "./components/PdfViewer";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import SearchBar from "./components/SearchBar";
 import TranslatePopup from "./components/TranslatePopup";
@@ -28,6 +28,7 @@ const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1
 const READER_PADDING_X = 48; // 阅读区左右留白（24px × 2）
 const READER_PADDING_X_NARROW = 24; // ≤720px 窄断点（12px × 2），与 global.css 媒体查询对齐
 const READER_PADDING_Y = 56; // 阅读区上下留白（28px × 2）
+const DOUBLE_PAGE_GAP = 16; // 双页模式两页之间的间隙，与 global.css .pdf-slot-pair 一致
 
 export type ScaleMode = "fit-width" | "fit-page" | "custom";
 
@@ -41,7 +42,8 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   /** 用户显式跳转意图（页码输入/前后翻页）。追踪观察器只跟随滚动，不触发滚动 */
   const [jumpTarget, setJumpTarget] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("continuous");
+  const [pageLayout, setPageLayout] = useState<PageLayout>("single");
+  const [flipMode, setFlipMode] = useState<FlipMode>("scroll");
   const [scaleMode, setScaleMode] = useState<ScaleMode>("fit-width");
   /**
    * 用户最后选择的 fit 模式（fit-width / fit-page）。
@@ -251,17 +253,18 @@ export default function App() {
    */
   const toggleFit = useCallback(() => {
     if (!refPage || !containerWidth || !containerHeight) return;
+    const spanW = pageLayout === "double" ? refPage.w * 2 + DOUBLE_PAGE_GAP : refPage.w;
     const wFit = Math.max(
       0.1,
       (containerWidth - (narrowWindow ? READER_PADDING_X_NARROW : READER_PADDING_X)) /
-        refPage.w
+        spanW
     );
     const hFit = Math.max(0.1, (containerHeight - READER_PADDING_Y) / refPage.h);
     const next = fitIntent === "fit-width" ? wFit : Math.min(wFit, hFit);
     setFitIntent(fitIntent === "fit-width" ? "fit-page" : "fit-width");
     setScale(next);
     setScaleMode("custom");
-  }, [refPage, containerWidth, containerHeight, fitIntent, narrowWindow]);
+  }, [refPage, containerWidth, containerHeight, fitIntent, narrowWindow, pageLayout]);
 
   // 当前页变化时获取该页真实尺寸，作为 fit 倍率基准。
   // debounce 250ms：滚动经过多页时避免基准页/倍率连续变化导致布局抖动
@@ -289,15 +292,17 @@ export default function App() {
   }, [pdf, currentPage, basePage]);
 
   // fit 倍率随基准页和容器尺寸变化（基准页 = 当前页）。
-  // 左右留白与 CSS 断点对齐：≤720px 时 slot padding 减半
+  // 左右留白与 CSS 断点对齐：≤720px 时 slot padding 减半。
+  // 双页模式宽度按"两页 + 页间隙"计算（首页单独一页时仍按两页预留，切页不跳动）
   const paddingX = narrowWindow ? READER_PADDING_X_NARROW : READER_PADDING_X;
   useEffect(() => {
     if (!refPage) return;
-    const wFit = Math.max(0.1, (containerWidth - paddingX) / refPage.w);
+    const spanW = pageLayout === "double" ? refPage.w * 2 + DOUBLE_PAGE_GAP : refPage.w;
+    const wFit = Math.max(0.1, (containerWidth - paddingX) / spanW);
     const hFit = Math.max(0.1, (containerHeight - READER_PADDING_Y) / refPage.h);
     setFitScale(wFit);
     setFitPageScale(Math.min(wFit, hFit));
-  }, [containerWidth, containerHeight, refPage, paddingX]);
+  }, [containerWidth, containerHeight, refPage, paddingX, pageLayout]);
 
   // ---------- 页码 ----------
 
@@ -337,18 +342,18 @@ export default function App() {
 
   /**
    * 选中匹配变化：设置激活高亮并滚动定位。
-   * 单页模式还需切换当前页；连续模式交由 scrollIntoView 滚动，
+   * 翻页模式还需切换当前页；滚动模式交由 scrollIntoView 滚动，
    * 观察器随后跟随滚动更新页码（避免与页跳转动画互相抢占）
    */
   const handleActiveMatchChange = useCallback(
     (match: SearchMatch | null) => {
       setActiveMatchId(match?.id ?? null);
       setFocusMatchId(match?.id ?? null);
-      if (match && viewMode === "single" && match.page !== currentPage) {
+      if (match && flipMode === "paged" && match.page !== currentPage) {
         goToPage(match.page);
       }
     },
-    [viewMode, currentPage, goToPage]
+    [flipMode, currentPage, goToPage]
   );
 
   /** Ctrl+F 打开查找（存在文档时） */
@@ -364,18 +369,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pdf]);
 
-  // ---------- 键盘（单页模式翻页；连续模式走原生滚动） ----------
+  // ---------- 键盘（翻页模式整页翻动，双页按对翻；滚动模式走原生滚动） ----------
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!pdf || viewMode !== "single") return;
+      if (!pdf || flipMode !== "paged") return;
       if (e.target instanceof HTMLInputElement) return;
+      const step = pageLayout === "double" ? 2 : 1;
       if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
         e.preventDefault();
-        goToPage(currentPage + 1);
+        goToPage(currentPage + step);
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        goToPage(currentPage - 1);
+        goToPage(currentPage - step);
       } else if (e.key === "Home") {
         e.preventDefault();
         goToPage(1);
@@ -386,7 +392,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pdf, viewMode, currentPage, numPages, goToPage]);
+  }, [pdf, flipMode, pageLayout, currentPage, numPages, goToPage]);
 
   // ---------- 错误提示自动消失 ----------
 
@@ -403,8 +409,10 @@ export default function App() {
         numPages={numPages}
         currentPage={currentPage}
         onJumpToPage={goToPage}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        pageLayout={pageLayout}
+        onPageLayoutChange={setPageLayout}
+        flipMode={flipMode}
+        onFlipModeChange={setFlipMode}
         fitIntent={fitIntent}
         onToggleFit={toggleFit}
         effScale={effScale}
@@ -458,10 +466,11 @@ export default function App() {
                 />
               )}
               <PdfViewer
-                key={`${fileName}-${viewMode === "single" ? "s" : "c"}`}
+                key={`${fileName}-${pageLayout}-${flipMode}`}
                 doc={pdf.doc}
                 numPages={numPages}
-                viewMode={viewMode}
+                pageLayout={pageLayout}
+                flipMode={flipMode}
                 currentPage={currentPage}
                 onCurrentPageChange={handlePageChange}
                 jumpTarget={jumpTarget}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n, UI_LANGS } from "../i18n";
 import type { ThemePref } from "../hooks/useTheme";
-import type { ViewMode } from "./PdfViewer";
+import type { PageLayout, FlipMode } from "./PdfViewer";
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -28,8 +28,10 @@ interface ToolbarProps {
   numPages: number;
   currentPage: number;
   onJumpToPage: (page: number) => void;
-  viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
+  pageLayout: PageLayout;
+  onPageLayoutChange: (layout: PageLayout) => void;
+  flipMode: FlipMode;
+  onFlipModeChange: (mode: FlipMode) => void;
   /** 用户最后选择的 fit 模式，点击按钮将切换到另一个 */
   fitIntent: "fit-width" | "fit-page";
   onToggleFit: () => void;
@@ -65,8 +67,10 @@ export default function Toolbar({
   numPages,
   currentPage,
   onJumpToPage,
-  viewMode,
-  onViewModeChange,
+  pageLayout,
+  onPageLayoutChange,
+  flipMode,
+  onFlipModeChange,
   fitIntent,
   onToggleFit,
   effScale,
@@ -275,25 +279,47 @@ export default function Toolbar({
                 </>
               )}
 
-              <div className="tb-dropdown-label">{t("viewMode")}</div>
+              <div className="tb-dropdown-label">{t("pageLayout")}</div>
               <div className="tb-dropdown-row">
                 <button
                   type="button"
-                  className={`tb-dropdown-choice ${viewMode === "single" ? "is-active" : ""}`}
+                  className={`tb-dropdown-choice ${pageLayout === "single" ? "is-active" : ""}`}
                   role="menuitemradio"
-                  aria-checked={viewMode === "single"}
-                  onClick={() => onViewModeChange("single")}
+                  aria-checked={pageLayout === "single"}
+                  onClick={() => onPageLayoutChange("single")}
                 >
                   {t("singlePage")}
                 </button>
                 <button
                   type="button"
-                  className={`tb-dropdown-choice ${viewMode === "continuous" ? "is-active" : ""}`}
+                  className={`tb-dropdown-choice ${pageLayout === "double" ? "is-active" : ""}`}
                   role="menuitemradio"
-                  aria-checked={viewMode === "continuous"}
-                  onClick={() => onViewModeChange("continuous")}
+                  aria-checked={pageLayout === "double"}
+                  onClick={() => onPageLayoutChange("double")}
+                >
+                  {t("doublePage")}
+                </button>
+              </div>
+
+              <div className="tb-dropdown-label">{t("flipMode")}</div>
+              <div className="tb-dropdown-row">
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${flipMode === "scroll" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={flipMode === "scroll"}
+                  onClick={() => onFlipModeChange("scroll")}
                 >
                   {t("continuous")}
+                </button>
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${flipMode === "paged" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={flipMode === "paged"}
+                  onClick={() => onFlipModeChange("paged")}
+                >
+                  {t("paged")}
                 </button>
               </div>
 

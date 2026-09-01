@@ -10,12 +10,16 @@ import type { SearchMatch } from "../lib/search";
 import PdfPage from "./PdfPage";
 import { useVisiblePages } from "../hooks/useVisiblePages";
 
-export type ViewMode = "single" | "continuous";
+/** 页面布局：每屏一页还是一对页 */
+export type PageLayout = "single" | "double";
+/** 翻页模式：连续滚动还是整页翻动 */
+export type FlipMode = "scroll" | "paged";
 
 interface PdfViewerProps {
   doc: PDFDocumentProxy;
   numPages: number;
-  viewMode: ViewMode;
+  pageLayout: PageLayout;
+  flipMode: FlipMode;
   currentPage: number;
   onCurrentPageChange: (page: number) => void;
   /** 用户显式跳转的目标页（页码输入/前后翻页按钮）。追踪观察器只跟随滚动，永不引发滚动 */
@@ -45,7 +49,8 @@ interface PdfViewerProps {
 export default function PdfViewer({
   doc,
   numPages,
-  viewMode,
+  pageLayout,
+  flipMode,
   currentPage,
   onCurrentPageChange,
   jumpTarget,
@@ -79,7 +84,7 @@ export default function PdfViewer({
   const { visiblePages, registerPage } = useVisiblePages({
     containerRef,
     numPages,
-    enabled: viewMode === "continuous",
+    enabled: flipMode === "scroll",
     onCurrentPageChange: handleVisiblePage,
   });
 
@@ -98,7 +103,7 @@ export default function PdfViewer({
   }, [onWidthChange, onHeightChange, doc]);
 
   // Ctrl+滚轮缩放（WebView2 中触屏捏合也表现为 ctrl+wheel）
-  // 单页模式：滚到顶/底后再滚，切换上一页/下一页
+  // 翻页模式：滚到顶/底后再滚，切换上一页/下一页（双页按对翻）
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -124,13 +129,13 @@ export default function PdfViewer({
         return;
       }
 
-      if (viewMode !== "single") return;
+      if (flipMode !== "paged") return;
       // 页面尚可滚动时交给原生滚动
       const atTop = el.scrollTop <= 0;
       const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
       if (e.deltaY < 0 && !atTop) return;
       if (e.deltaY > 0 && !atBottom) return;
-      // 到达边界：拦截并翻页。快速连续滚动（触控板惯性）只翻一页
+      // 到达边界：拦截并翻页。快速连续滚动（触控板惯性）只翻一次
       e.preventDefault();
       const now = performance.now();
       if (now - wheelIntentTimer > INTENT_WINDOW) {
@@ -139,7 +144,8 @@ export default function PdfViewer({
       }
       if (intentConsumed) return;
       intentConsumed = true;
-      onCurrentPageChange(e.deltaY > 0 ? currentPage + 1 : currentPage - 1);
+      const step = pageLayout === "double" ? 2 : 1;
+      onCurrentPageChange(e.deltaY > 0 ? currentPage + step : currentPage - step);
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
@@ -147,17 +153,17 @@ export default function PdfViewer({
       el.removeEventListener("wheel", onWheel);
       window.clearTimeout(wheelIntentTimer);
     };
-  }, [effScale, onZoomStep, viewMode, currentPage, onCurrentPageChange]);
+  }, [effScale, onZoomStep, flipMode, pageLayout, currentPage, onCurrentPageChange]);
 
-  // 单页模式：翻页后回到页面顶部。
+  // 翻页模式：翻页后回到页面顶部。
   // wheel 翻页发生在旧页已滚到底部时，容器 scrollTop 保留旧值，
   // 新页挂载后若不重置，会停留在新页的底部/中间位置。
   useEffect(() => {
-    if (viewMode !== "single") return;
+    if (flipMode !== "paged") return;
     const el = containerRef.current;
     if (!el) return;
     el.scrollTop = 0;
-  }, [currentPage, viewMode]);
+  }, [currentPage, flipMode]);
 
   // 缩放后恢复位置：Ctrl+滚轮走鼠标锚点；fit 倍率变化（窗口缩放等）锚定当前页顶部
   useLayoutEffect(() => {
@@ -172,19 +178,19 @@ export default function PdfViewer({
       el.scrollTop = Math.max(0, anchor.cy * effScale - anchor.my);
       return;
     }
-    if (prev !== null && prev !== effScale && viewMode === "continuous") {
+    if (prev !== null && prev !== effScale && flipMode === "scroll") {
       el.querySelector<HTMLElement>(`[data-page="${currentPage}"]`)
         ?.scrollIntoView({ block: "start" });
     }
-  }, [effScale, currentPage, viewMode]);
+  }, [effScale, currentPage, flipMode]);
 
-  // 连续模式：仅在用户显式跳转时滚动到目标页。
+  // 滚动模式：仅在用户显式跳转时滚动到目标页。
   // 追踪观察器驱动的页码变化不触发滚动（否则拖动滚动条时观察器滞后上报
   // 视口外的页，会反向发起 smooth 滚动，松手后滚动条"自己跑"）
   useEffect(() => {
     if (jumpTarget == null) return;
-    if (viewMode !== "continuous") {
-      // 单页模式无需滚动，直接由 currentPage 驱动渲染
+    if (flipMode === "paged") {
+      // 翻页模式无需滚动，直接由 currentPage 驱动渲染
       onJumpHandled();
       return;
     }
@@ -254,7 +260,7 @@ export default function PdfViewer({
       // 被新跳转/卸载打断时也清理意图，避免残留
       onJumpHandled();
     };
-  }, [jumpTarget, viewMode, doc, onJumpHandled]);
+  }, [jumpTarget, flipMode, doc, onJumpHandled]);
 
   const pw = basePage.w * effScale;
   const ph = basePage.h * effScale;
@@ -292,13 +298,75 @@ export default function PdfViewer({
     return () => cancelAnimationFrame(raf);
   }, [focusMatchId, jumpTarget, onFocusHandled]);
 
+  // 双页布局的配对数组：[1,2] [3,4] …（最后一对可能只有左页）
+  const pairs = useMemo(() => {
+    if (pageLayout !== "double") return [];
+    const out: number[][] = [];
+    for (let p = 1; p <= numPages; p += 2) {
+      out.push(p + 1 <= numPages ? [p, p + 1] : [p]);
+    }
+    return out;
+  }, [pageLayout, numPages]);
+
+  const renderPage = (page: number, visible: boolean) => (
+    <div
+      className="pdf-pair-page"
+      data-page={page}
+      ref={(el) => registerPage(page, el)}
+    >
+      <PdfPage
+        doc={doc}
+        pageNumber={page}
+        scale={effScale}
+        estimatedW={pw}
+        estimatedH={ph}
+        visible={visible}
+        highlights={matchesByPage.get(page)?.flatMap((m) => m.rects) ?? []}
+        activeHighlightId={activeMatchId}
+      />
+    </div>
+  );
+
+  // 翻页模式：只渲染当前页（双页布局渲染当前对，pairStart 归一到对首）
+  const pagedStart = pageLayout === "double" && currentPage % 2 === 0
+    ? currentPage - 1
+    : currentPage;
+
   return (
     <div
       ref={containerRef}
-      className={`pdf-viewer ${viewMode === "single" ? "mode-single" : "mode-continuous"}`}
+      className={`pdf-viewer mode-${flipMode} layout-${pageLayout}`}
     >
       <div className="pdf-pages">
-        {viewMode === "continuous" ? (
+        {flipMode === "paged" ? (
+          pageLayout === "double" ? (
+            <div className="pdf-slot pdf-slot-pair">
+              {renderPage(pagedStart, true)}
+              {pagedStart + 1 <= numPages && renderPage(pagedStart + 1, true)}
+            </div>
+          ) : (
+            <div className="pdf-slot">
+              <PdfPage
+                key={currentPage}
+                doc={doc}
+                pageNumber={currentPage}
+                scale={effScale}
+                estimatedW={pw}
+                estimatedH={ph}
+                visible
+                highlights={matchesByPage.get(currentPage)?.flatMap((m) => m.rects) ?? []}
+                activeHighlightId={activeMatchId}
+              />
+            </div>
+          )
+        ) : pageLayout === "double" ? (
+          pairs.map(([left, right]) => (
+            <div key={left} className="pdf-slot pdf-slot-pair">
+              {renderPage(left, visiblePages.has(left))}
+              {right != null && renderPage(right, visiblePages.has(right))}
+            </div>
+          ))
+        ) : (
           Array.from({ length: numPages }, (_, i) => (
             <div
               key={i + 1}
@@ -306,32 +374,9 @@ export default function PdfViewer({
               ref={(el) => registerPage(i + 1, el)}
               data-page={i + 1}
             >
-              <PdfPage
-                doc={doc}
-                pageNumber={i + 1}
-                scale={effScale}
-                estimatedW={pw}
-                estimatedH={ph}
-                visible={visiblePages.has(i + 1)}
-                highlights={matchesByPage.get(i + 1)?.flatMap((m) => m.rects) ?? []}
-                activeHighlightId={activeMatchId}
-              />
+              {renderPage(i + 1, visiblePages.has(i + 1))}
             </div>
           ))
-        ) : (
-          <div className="pdf-slot">
-            <PdfPage
-              key={currentPage}
-              doc={doc}
-              pageNumber={currentPage}
-              scale={effScale}
-              estimatedW={pw}
-              estimatedH={ph}
-              visible
-              highlights={matchesByPage.get(currentPage)?.flatMap((m) => m.rects) ?? []}
-              activeHighlightId={activeMatchId}
-            />
-          </div>
         )}
       </div>
     </div>

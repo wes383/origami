@@ -954,8 +954,20 @@ button:disabled {
   padding-inline: 24px;
 }
 
-.mode-single .pdf-slot {
+.mode-paged .pdf-slot {
   margin-block: auto;
+}
+
+/* 双页模式：slot 变成行容器，两页水平排列 */
+.pdf-slot-pair {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+/* 双页模式单页 wrapper（用于页码追踪/跳转定位） */
+.pdf-pair-page {
+  flex-shrink: 0;
 }
 
 .pdf-page {
