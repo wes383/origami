@@ -31,6 +31,7 @@ export const es: Record<LangKeys, string> = {
   showInFolder: "Mostrar en la carpeta",
   toc: "Índice",
   tocClose: "Cerrar el índice",
+  thumbnails: "Miniaturas",
   // Traducción de selección con IA
   aiSettings: "Ajustes de traducción con IA",
   aiTranslate: "Traducir con IA",

@@ -31,6 +31,7 @@ export const ru: Record<LangKeys, string> = {
   showInFolder: "Показать в папке",
   toc: "Содержание",
   tocClose: "Закрыть содержание",
+  thumbnails: "Миниатюры",
   // Перевод выделенного с помощью ИИ
   aiSettings: "Настройки перевода ИИ",
   aiTranslate: "Перевод ИИ",

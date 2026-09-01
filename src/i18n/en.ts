@@ -29,8 +29,9 @@ export const en: Record<LangKeys, string> = {
   recent: "Recent Files",
   removeFromRecent: "Remove from recent",
   showInFolder: "Show in folder",
-  toc: "Table of Contents",
+  toc: "Contents",
   tocClose: "Close Table of Contents",
+  thumbnails: "Thumbnails",
   // AI selection translate
   aiSettings: "AI Translation Settings",
   aiTranslate: "AI Translate",

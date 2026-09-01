@@ -27,9 +27,10 @@ export const zh = {
   recent: "最近打开",
   removeFromRecent: "从最近打开中移除",
   showInFolder: "打开所在文件夹",
-  // 目录
+  // 目录 / 缩略图
   toc: "目录",
   tocClose: "关闭目录",
+  thumbnails: "页面缩略图",
   // AI 划词/划句翻译
   aiSettings: "AI 翻译设置",
   aiTranslate: "AI 翻译",

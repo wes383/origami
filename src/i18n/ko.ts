@@ -31,6 +31,7 @@ export const ko: Record<LangKeys, string> = {
   showInFolder: "폴더 열기",
   toc: "목차",
   tocClose: "목차 닫기",
+  thumbnails: "페이지 미리보기",
   // AI 선택 번역
   aiSettings: "AI 번역 설정",
   aiTranslate: "AI 번역",

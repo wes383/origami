@@ -15,7 +15,7 @@ import {
 } from "./lib/recent";
 import Toolbar from "./components/Toolbar";
 import PdfViewer, { type ViewMode } from "./components/PdfViewer";
-import OutlinePanel from "./components/OutlinePanel";
+import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import TranslatePopup from "./components/TranslatePopup";
 import AiSettingsModal from "./components/AiSettingsModal";
 import EmptyState from "./components/EmptyState";
@@ -68,8 +68,10 @@ export default function App() {
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   /** 当前文档的目录树 */
   const [outline, setOutline] = useState<OutlineNode[]>([]);
-  /** 目录侧边栏展开状态 */
-  const [outlineOpen, setOutlineOpen] = useState(false);
+  /** 侧边栏展开状态 */
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  /** 侧边栏当前标签页（目录 / 缩略图） */
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -122,8 +124,9 @@ export default function App() {
       // 解析目录（失败不阻塞打开文档）
       const parsedOutline = await loadOutline(opened.doc).catch(() => []);
       setOutline(parsedOutline);
-      // 含目录的文档默认展开侧边栏，便于导航
-      setOutlineOpen(parsedOutline.length > 0);
+      // 含目录的文档默认展开侧边栏（目录页签），便于导航
+      setSidebarTab("outline");
+      setSidebarOpen(parsedOutline.length > 0);
     } catch {
       setErrorKey("errorInvalid");
     } finally {
@@ -157,7 +160,8 @@ export default function App() {
     setScale(1);
     setErrorKey(null);
     setOutline([]);
-    setOutlineOpen(false);
+    setSidebarOpen(false);
+    setSidebarTab("outline");
   }, []);
 
   // ---------- 禁用右键菜单（阅读器场景） ----------
@@ -360,21 +364,32 @@ export default function App() {
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
         outlineAvailable={outline.length > 0}
-        outlineOpen={outlineOpen}
-        onToggleOutline={() => setOutlineOpen((v) => !v)}
+        sidebarOpen={sidebarOpen}
+        sidebarTab={sidebarTab}
+        onToggleSidebar={(tab) => {
+          if (sidebarOpen && sidebarTab === tab) setSidebarOpen(false);
+          else {
+            setSidebarTab(tab);
+            setSidebarOpen(true);
+          }
+        }}
         disabled={!pdf}
       />
 
       <main className="reader">
         {pdf && basePage ? (
-          <div className={`reader-body ${outlineOpen && outline.length > 0 ? "with-outline" : ""}`}>
-            {outlineOpen && outline.length > 0 && (
-              <OutlinePanel
+          <div className={`reader-body ${sidebarOpen ? "with-sidebar" : ""}`}>
+            {sidebarOpen && (
+              <Sidebar
                 key={fileName}
+                doc={pdf.doc}
+                numPages={numPages}
                 outline={outline}
+                tab={sidebarTab}
+                onTabChange={setSidebarTab}
                 currentPage={currentPage}
                 onNavigate={goToPage}
-                onClose={() => setOutlineOpen(false)}
+                onClose={() => setSidebarOpen(false)}
               />
             )}
             <div className="reader-main">

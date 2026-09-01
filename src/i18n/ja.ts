@@ -31,6 +31,7 @@ export const ja: Record<LangKeys, string> = {
   showInFolder: "フォルダを表示",
   toc: "目次",
   tocClose: "目次を閉じる",
+  thumbnails: "ページサムネイル",
   // AI 選択翻訳
   aiSettings: "AI 翻訳設定",
   aiTranslate: "AI 翻訳",

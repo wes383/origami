@@ -9,6 +9,7 @@ import {
   DocIcon,
   FitPageIcon,
   FitWidthIcon,
+  GridIcon,
   LanguagesIcon,
   ListIcon,
   MinusIcon,
@@ -16,6 +17,7 @@ import {
   SettingsIcon,
   XIcon,
 } from "./Icons";
+import type { SidebarTab } from "./Sidebar";
 
 /** ≤此宽度时隐藏工具栏缩放控件（改由设置菜单提供） */
 const ZOOM_HIDDEN_BELOW = 560;
@@ -46,10 +48,12 @@ interface ToolbarProps {
   onOpenAiSettings: () => void;
   /** 当前文档是否含目录 */
   outlineAvailable: boolean;
-  /** 目录侧边栏是否展开 */
-  outlineOpen: boolean;
-  /** 切换目录侧边栏 */
-  onToggleOutline: () => void;
+  /** 侧边栏是否展开 */
+  sidebarOpen: boolean;
+  /** 侧边栏当前标签页 */
+  sidebarTab: SidebarTab;
+  /** 切换侧边栏（同标签页重复点击则收起） */
+  onToggleSidebar: (tab: SidebarTab) => void;
   disabled: boolean;
 }
 
@@ -74,8 +78,9 @@ export default function Toolbar({
   onCloseFile,
   onOpenAiSettings,
   outlineAvailable,
-  outlineOpen,
-  onToggleOutline,
+  sidebarOpen,
+  sidebarTab,
+  onToggleSidebar,
   disabled,
 }: ToolbarProps) {
   const { t, lang, setLang } = useI18n();
@@ -216,24 +221,46 @@ export default function Toolbar({
                 </button>
               )}
 
-              {!disabled && outlineAvailable && (
+              {!disabled && (
                 <>
                   <div className="tb-dropdown-separator" />
 
                   {/* 目录侧边栏开关（仅当前文档含目录时提供） */}
+                  {outlineAvailable && (
+                    <button
+                      type="button"
+                      className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "outline" ? "is-active" : ""}`}
+                      role="menuitemcheckbox"
+                      aria-checked={sidebarOpen && sidebarTab === "outline"}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onToggleSidebar("outline");
+                      }}
+                    >
+                      <ListIcon />
+                      <span>{t("toc")}</span>
+                      {sidebarOpen && sidebarTab === "outline" && (
+                        <span className="tb-item-check">
+                          <CheckIcon size={14} />
+                        </span>
+                      )}
+                    </button>
+                  )}
+
+                  {/* 页面缩略图侧边栏开关 */}
                   <button
                     type="button"
-                    className={`tb-dropdown-item ${outlineOpen ? "is-active" : ""}`}
+                    className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "thumbnails" ? "is-active" : ""}`}
                     role="menuitemcheckbox"
-                    aria-checked={outlineOpen}
+                    aria-checked={sidebarOpen && sidebarTab === "thumbnails"}
                     onClick={() => {
                       setMenuOpen(false);
-                      onToggleOutline();
+                      onToggleSidebar("thumbnails");
                     }}
                   >
-                    <ListIcon />
-                    <span>{t("toc")}</span>
-                    {outlineOpen && (
+                    <GridIcon />
+                    <span>{t("thumbnails")}</span>
+                    {sidebarOpen && sidebarTab === "thumbnails" && (
                       <span className="tb-item-check">
                         <CheckIcon size={14} />
                       </span>
