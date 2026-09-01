@@ -4,6 +4,8 @@ export const ko: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "전체 화면",
   exitFullscreen: "전체 화면 종료",
+  pinToolbar: "도구 모음 고정",
+  unpinToolbar: "고정 해제",
   shortcutFullscreen: "전체 화면 전환",
   openDropHint: "또는 PDF 파일을 여기로 드래그하여 열 수 있습니다",
   openPdf: "PDF 열기",

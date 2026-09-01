@@ -4,6 +4,8 @@ export const en: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "Fullscreen",
   exitFullscreen: "Exit fullscreen",
+  pinToolbar: "Pin toolbar",
+  unpinToolbar: "Unpin toolbar",
   shortcutFullscreen: "Toggle fullscreen",
   openDropHint: "Or drag a PDF file here to open",
   openPdf: "Open PDF",

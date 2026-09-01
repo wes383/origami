@@ -42,6 +42,28 @@ const READER_PADDING_X_NARROW = 24; // ≤720px 窄断点（12px × 2），与 g
 const READER_PADDING_Y = 56; // 阅读区上下留白（28px × 2）
 const DOUBLE_PAGE_GAP = 16; // 双页模式两页之间的间隙，与 global.css .pdf-slot-pair 一致
 
+/** 侧边栏展开偏好的 localStorage key：记住用户上次手动展开/关闭，打开文档时应用 */
+const SIDEBAR_PREF_KEY = "pdfreader-sidebar-pref";
+
+/** 读取偏好；无记录（首次使用）默认展开，兼容旧行为（含目录的文档自动展开） */
+function loadSidebarPref(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_PREF_KEY) !== "closed";
+  } catch {
+    return true;
+  }
+}
+
+/** 保存偏好：仅在用户手动操作（开关按钮 / 关闭按钮 / 快捷键）时调用，
+    程序自动设置（打开/关闭文档时的重置）不得调用，避免覆盖用户选择 */
+function saveSidebarPref(open: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_PREF_KEY, open ? "open" : "closed");
+  } catch {
+    // 忽略（隐私模式等 localStorage 不可用场景）
+  }
+}
+
 export type { ScaleMode };
 
 export default function App() {
@@ -267,9 +289,10 @@ export default function App() {
         // 解析目录（失败不阻塞打开文档）
         const parsedOutline = await loadOutline(opened.doc).catch(() => []);
         setOutline(parsedOutline);
-        // 含目录的文档默认展开侧边栏（目录页签），便于导航
+        // 侧边栏默认状态：应用用户上次手动选择的展开/关闭偏好（无记录时默认展开）；
+        // 文档本身无目录时无论偏好如何都不展开（没有可导航的内容）
         setSidebarTab("outline");
-        setSidebarOpen(parsedOutline.length > 0);
+        setSidebarOpen(loadSidebarPref() && parsedOutline.length > 0);
 
         // 新文档：清空上一个文档的查找结果
         setSearchMatches([]);
@@ -696,10 +719,13 @@ export default function App() {
         } else if (key === "\\") {
           e.preventDefault();
           // 同标签页重复点击则收起
-          if (sidebarOpen && sidebarTab === "outline") setSidebarOpen(false);
-          else {
+          if (sidebarOpen && sidebarTab === "outline") {
+            setSidebarOpen(false);
+            saveSidebarPref(false);
+          } else {
             setSidebarTab("outline");
             setSidebarOpen(true);
+            saveSidebarPref(true);
           }
         }
         return;
@@ -789,10 +815,13 @@ export default function App() {
         sidebarOpen={sidebarOpen}
         sidebarTab={sidebarTab}
         onToggleSidebar={(tab) => {
-          if (sidebarOpen && sidebarTab === tab) setSidebarOpen(false);
-          else {
+          if (sidebarOpen && sidebarTab === tab) {
+            setSidebarOpen(false);
+            saveSidebarPref(false);
+          } else {
             setSidebarTab(tab);
             setSidebarOpen(true);
+            saveSidebarPref(true);
           }
         }}
         disabled={!pdf}
@@ -811,7 +840,10 @@ export default function App() {
                 onTabChange={setSidebarTab}
                 currentPage={currentPage}
                 onNavigate={goToPage}
-                onClose={() => setSidebarOpen(false)}
+                onClose={() => {
+                  setSidebarOpen(false);
+                  saveSidebarPref(false);
+                }}
               />
             )}
             <div className="reader-main">

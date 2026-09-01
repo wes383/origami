@@ -4,6 +4,8 @@ export const it: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "Schermo intero",
   exitFullscreen: "Esci dallo schermo intero",
+  pinToolbar: "Blocca barra strumenti",
+  unpinToolbar: "Sblocca barra strumenti",
   shortcutFullscreen: "Attiva/disattiva schermo intero",
   openDropHint: "Oppure trascina qui un file PDF per aprirlo",
   openPdf: "Apri PDF",

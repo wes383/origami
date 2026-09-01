@@ -602,6 +602,25 @@ button:disabled {
   --tauri-frame-controls-width: 0px !important;
 }
 
+/* 全屏 auto-hide 工具栏（Toolbar.tsx 在全屏时根据鼠标位置切换 .toolbar-hidden）：
+   默认滑出屏幕顶部，鼠标移到顶部（y ≤ 60，含工具栏自身）滑入，移出后延迟 400ms
+   滑走（设置下拉菜单打开时禁止隐藏，见 Toolbar.tsx 的 menuOpenRef 判断）。
+   transform 上滑 + margin-bottom 负值抵消占位 —— 工具栏是文档流元素（flex column
+   顶部 52px），只 transform 会留下 52px 空隙；负 margin 让 .reader 同步上移占满全屏。
+   隐藏态 pointer-events: none 防止屏幕外的残留命中。 */
+.fs-on .toolbar {
+  transition:
+    background-color var(--duration-base) var(--ease-out),
+    transform 0.18s ease,
+    margin-bottom 0.18s ease;
+}
+
+.fs-on .toolbar.toolbar-hidden {
+  transform: translateY(-100%);
+  margin-bottom: calc(-1 * var(--toolbar-h));
+  pointer-events: none;
+}
+
 .tb-group {
   display: flex;
   align-items: center;

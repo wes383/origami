@@ -4,6 +4,8 @@ export const ru: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "Полноэкранный режим",
   exitFullscreen: "Выйти из полноэкранного режима",
+  pinToolbar: "Закрепить панель инструментов",
+  unpinToolbar: "Открепить панель инструментов",
   shortcutFullscreen: "Переключить полноэкранный режим",
   openDropHint: "Или перетащите PDF-файл сюда, чтобы открыть",
   openPdf: "Открыть PDF",

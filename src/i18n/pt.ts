@@ -4,6 +4,8 @@ export const pt: Record<LangKeys, string> = {
   docTitle: "Origami",
   fullscreen: "Tela cheia",
   exitFullscreen: "Sair da tela cheia",
+  pinToolbar: "Fixar barra de ferramentas",
+  unpinToolbar: "Desafixar barra de ferramentas",
   shortcutFullscreen: "Alternar tela cheia",
   openDropHint: "Ou arraste um arquivo PDF para cá para abri-lo",
   openPdf: "Abrir PDF",

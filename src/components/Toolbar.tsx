@@ -17,6 +17,8 @@ import {
   LanguagesIcon,
   ListIcon,
   MinusIcon,
+  PinIcon,
+  PinOffIcon,
   PlusIcon,
   PrinterIcon,
   RotateIcon,
@@ -28,6 +30,13 @@ import type { SidebarTab } from "./Sidebar";
 
 /** ≤此宽度时隐藏工具栏缩放控件（改由设置菜单提供） */
 const ZOOM_HIDDEN_BELOW = 560;
+
+/** 全屏 auto-hide：鼠标移到屏幕顶边该 y 内唤醒工具栏滑入 */
+const FS_BAR_WAKE_ZONE = 8;
+/** 兜底隐藏阈值：鼠标在此 y 外且菜单未开时延迟隐藏（主路径是 pointerleave） */
+const FS_BAR_SHOW_ZONE = 60;
+/** 移出工具栏区域后延迟隐藏的毫秒数（防鼠标快速掠过误触发） */
+const FS_BAR_HIDE_DELAY = 400;
 
 interface ToolbarProps {
   fileName: string;
@@ -125,6 +134,81 @@ export default function Toolbar({
   const [narrow, setNarrow] = useState(
     () => window.innerWidth <= ZOOM_HIDDEN_BELOW
   );
+  /** 全屏 auto-hide：工具栏是否显示（鼠标在顶部触发带内显示，移出后延迟隐藏） */
+  const [fsBarVisible, setFsBarVisible] = useState(false);
+  const fsHideTimerRef = useRef<number | null>(null);
+  /** 全屏时是否锁定工具栏（点击图钉按钮后永久固定，不再 auto-hide） */
+  const [fsBarPinned, setFsBarPinned] = useState(false);
+  const fsBarPinnedRef = useRef(fsBarPinned);
+  /** 菜单打开时禁止隐藏（下拉在工具栏下方展开，鼠标落在其上是合法交互） */
+  const menuOpenRef = useRef(menuOpen);
+  const langMenuOpenRef = useRef(langMenuOpen);
+
+  useEffect(() => {
+    menuOpenRef.current = menuOpen;
+  }, [menuOpen]);
+
+  useEffect(() => {
+    langMenuOpenRef.current = langMenuOpen;
+  }, [langMenuOpen]);
+
+  useEffect(() => {
+    fsBarPinnedRef.current = fsBarPinned;
+  }, [fsBarPinned]);
+
+  // 全屏 auto-hide 工具栏。隐藏路径以 DOM 的 pointerleave 为准（鼠标离开工具栏
+  // 元素必然触发，不受原生 Snap Overlay 拦截 / clientY 阈值 / 事件丢失影响）；
+  // 全局 pointermove 只负责两件事：
+  //   1) 唤醒：鼠标移到屏幕顶边窄带（y ≤ FS_BAR_WAKE_ZONE）→ 滑入
+  //   2) 兜底：鼠标在 y > FS_BAR_SHOW_ZONE 且菜单未开 → 延迟隐藏
+  //      （覆盖「菜单关闭后鼠标停留在内容区」等没有 leave 触发的场景）
+  // 中间带（8 < y ≤ 60）不动：鼠标刚离开工具栏时隐藏由 pointerleave 定时驱动。
+  // 菜单打开时禁止隐藏（下拉在工具栏下方展开，鼠标落在其上是合法交互）。
+  useEffect(() => {
+    if (!isFullscreen) {
+      setFsBarVisible(false);
+      setFsBarPinned(false);
+      if (fsHideTimerRef.current) {
+        window.clearTimeout(fsHideTimerRef.current);
+        fsHideTimerRef.current = null;
+      }
+      return;
+    }
+    const clearHideTimer = () => {
+      if (fsHideTimerRef.current) {
+        window.clearTimeout(fsHideTimerRef.current);
+        fsHideTimerRef.current = null;
+      }
+    };
+    const scheduleHide = () => {
+      if (fsHideTimerRef.current) return;
+      fsHideTimerRef.current = window.setTimeout(() => {
+        fsHideTimerRef.current = null;
+        setFsBarVisible(false);
+      }, FS_BAR_HIDE_DELAY);
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      // 锁定工具栏：不参与 auto-hide（唤醒/兜底全部跳过）
+      if (fsBarPinnedRef.current) return;
+      const y = e.clientY;
+      if (
+        y <= FS_BAR_WAKE_ZONE ||
+        menuOpenRef.current ||
+        langMenuOpenRef.current
+      ) {
+        clearHideTimer();
+        setFsBarVisible(true);
+      } else if (y > FS_BAR_SHOW_ZONE) {
+        scheduleHide();
+      }
+      // 8 < y ≤ 60：保持现状，隐藏由 header 的 onPointerLeave 定时驱动
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      clearHideTimer();
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${ZOOM_HIDDEN_BELOW}px)`);
@@ -212,8 +296,31 @@ export default function Toolbar({
     // 阻止该元素及其祖先的拖拽）——全屏窗口不应被拖动；
     // 右上角窗口按钮由 tauri-plugin-frame 注入（z-index 100 层，浮于工具栏之上）
     <header
-      className={`toolbar ${disabled ? "no-center" : ""}`}
+      className={`toolbar ${disabled ? "no-center" : ""} ${
+        isFullscreen && !fsBarPinned && !fsBarVisible ? "toolbar-hidden" : ""
+      }`}
       data-tauri-drag-region={isFullscreen ? "false" : ""}
+      onPointerEnter={() => {
+        // 鼠标进入工具栏：保持显示并取消隐藏定时
+        if (fsHideTimerRef.current) {
+          window.clearTimeout(fsHideTimerRef.current);
+          fsHideTimerRef.current = null;
+        }
+        setFsBarVisible(true);
+      }}
+      onPointerLeave={() => {
+        // 鼠标离开工具栏：延迟隐藏（菜单打开时鼠标在下拉菜单上，保持显示）。
+        // DOM pointerleave 在鼠标移出元素（含移到原生 Snap Overlay 上）时必然
+        // 触发，比全局 clientY 阈值可靠。锁定工具栏时永不隐藏。
+        if (fsBarPinned || menuOpenRef.current || langMenuOpenRef.current)
+          return;
+        if (!fsHideTimerRef.current) {
+          fsHideTimerRef.current = window.setTimeout(() => {
+            fsHideTimerRef.current = null;
+            setFsBarVisible(false);
+          }, FS_BAR_HIDE_DELAY);
+        }
+      }}
     >
       {/* 左：菜单 + 文件名 */}
       <div className="tb-group tb-left">
@@ -242,6 +349,27 @@ export default function Toolbar({
               aria-label={t("exitFullscreen")}
             >
               <FullscreenExitIcon />
+            </button>
+          )}
+
+          {/* 锁定工具栏：点击后永久固定（不再 auto-hide），再次点击解锁 */}
+          {isFullscreen && (
+            <button
+              type="button"
+              className="tb-btn icon-only"
+              onClick={() => {
+                setFsBarPinned((v) => !v);
+                // 取消可能已调度的隐藏定时，避免解锁瞬间工具栏闪没
+                if (fsHideTimerRef.current) {
+                  window.clearTimeout(fsHideTimerRef.current);
+                  fsHideTimerRef.current = null;
+                }
+              }}
+              title={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
+              aria-label={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
+              aria-pressed={fsBarPinned}
+            >
+              {fsBarPinned ? <PinOffIcon /> : <PinIcon />}
             </button>
           )}
 
