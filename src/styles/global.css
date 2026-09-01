@@ -1111,9 +1111,19 @@ button:disabled {
    ========================================================================== */
 
 /* 选区末端浮现的「AI 翻译」气泡 */
-.tr-bubble {
+/* 气泡组：fixed 容器（含 AI 翻译 + Wikipedia 两个按钮），居中偏置 */
+.tr-bubble-group {
   position: fixed;
   z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+  animation: tr-pop var(--duration-fast) var(--ease-out);
+}
+
+.tr-bubble {
+  flex-shrink: 0; /* 容器被任何机制压缩时保持按钮完整（窄选区场景） */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1127,13 +1137,83 @@ button:disabled {
   font-weight: 550;
   line-height: 1; /* Orkest 胶囊按钮规范：leading-none + flex 居中 */
   box-shadow: var(--shadow-md);
-  transform: translateX(-50%);
-  animation: tr-pop var(--duration-fast) var(--ease-out);
   user-select: none;
+}
+
+.tr-bubble > span {
+  white-space: nowrap; /* 防止 CJK 在窄宽度下按字换行 */
 }
 
 .tr-bubble:hover {
   background: var(--accent-hover);
+}
+
+/* Wikipedia 名词解释弹层 */
+.tr-wiki-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 头部条目名（与关闭按钮同行，长标题省略号） */
+.tr-wiki-head-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0 0 0 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5; /* descender 落在行盒内，不被 overflow:hidden 裁掉 */
+  color: var(--foreground);
+}
+
+.tr-wiki-thumb {
+  max-width: 180px;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+}
+
+.tr-wiki-extract {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--foreground-muted);
+}
+
+.tr-wiki-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tr-wiki-license {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--foreground-faint);
+}
+
+.tr-wiki-link {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: var(--hover-bg);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1;
+  transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.tr-wiki-link:hover {
+  background: var(--hover-bg-strong);
 }
 
 @keyframes tr-pop {

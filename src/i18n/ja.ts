@@ -75,4 +75,10 @@ export const ja: Record<LangKeys, string> = {
     "OpenAI Chat Completions プロトコルに対応（OpenAI / DeepSeek / Kimi / Ollama など）。設定はこの端末にのみ保存され、アップロードされることはありません。",
   aiCancel: "キャンセル",
   aiFillFirst: "Base URL、API Key、モデル名をすべて入力してください",
+  copy: "コピー",
+  // Wikipedia 用語解説
+  wikiLoading: "Wikipedia の概要を取得中…",
+  wikiNotFound: "該当する記事が見つかりません",
+  wikiEmpty: "この記事には概要がありません",
+  wikiOpen: "Wikipedia で開く",
 };

@@ -75,4 +75,10 @@ export const ru: Record<LangKeys, string> = {
     "Совместимо с протоколом OpenAI Chat Completions (OpenAI / DeepSeek / Kimi / Ollama и др.). Настройки хранятся только локально и никуда не отправляются.",
   aiCancel: "Отмена",
   aiFillFirst: "Заполните базовый URL, API-ключ и имя модели",
+  copy: "Копировать",
+  // Объяснение термина в Википедии
+  wikiLoading: "Загрузка краткого содержания из Википедии…",
+  wikiNotFound: "Статья не найдена",
+  wikiEmpty: "Для этой статьи нет краткого содержания",
+  wikiOpen: "Открыть в Википедии",
 };

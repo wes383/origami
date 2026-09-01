@@ -192,6 +192,27 @@ export function ChevronDownIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 百科/全球（lucide globe） */
+export function GlobeIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </svg>
+  );
+}
+
+/** 复制（lucide copy） */
+export function CopyIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
 /** 编辑（lucide pencil） */
 export function PencilIcon({ size = 16 }: IconProps) {
   return (

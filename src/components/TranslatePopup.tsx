@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useI18n } from "../i18n";
 import {
   buildContext,
@@ -26,7 +27,18 @@ import {
   type TranslateMode,
   type TranslateResult,
 } from "../lib/aiTranslate";
-import { ChevronDownIcon, LanguagesIcon, XIcon } from "./Icons";
+import {
+  fetchWikipediaSummary,
+  wikiLang,
+  type WikiResult,
+} from "../lib/wikipedia";
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  GlobeIcon,
+  LanguagesIcon,
+  XIcon,
+} from "./Icons";
 
 interface SelectionInfo {
   text: string;
@@ -43,10 +55,40 @@ type CardState = {
   errorDetail: string | null;
 };
 
+type WikiCardState = {
+  info: SelectionInfo;
+  status: "loading" | "done" | "error";
+  result: WikiResult | null;
+  /** 错误码：not-found | empty | network | http:<status> */
+  errorDetail: string | null;
+};
+
 const CARD_WIDTH = 380;
 
-/** 气泡按钮估算尺寸（水平 clamp 用，实际宽度随文案略有出入） */
-const BUBBLE_W = 120;
+/** 复制文本到剪贴板（优先 Clipboard API，失败回退 execCommand） */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/** 气泡组估算尺寸（水平 clamp 用，实际宽度随文案略有出入） */
+const BUBBLE_W = 300;
 const BUBBLE_H = 30;
 
 /** 气泡定位：优先选区下方，底部空间不足时翻到选区上方；水平 clamp 到视口内 */
@@ -96,6 +138,7 @@ export default function TranslatePopup({
 
   const [bubble, setBubble] = useState<SelectionInfo | null>(null);
   const [card, setCard] = useState<CardState | null>(null);
+  const [wiki, setWiki] = useState<WikiCardState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -103,6 +146,8 @@ export default function TranslatePopup({
   /** 快照式 state 的同步 ref：事件回调里读取最新值，避免闭包过期 */
   const cardRef = useRef<CardState | null>(null);
   cardRef.current = card;
+  const wikiRef = useRef<WikiCardState | null>(null);
+  wikiRef.current = wiki;
   const bubbleRef = useRef<SelectionInfo | null>(null);
   bubbleRef.current = bubble;
 
@@ -111,6 +156,7 @@ export default function TranslatePopup({
     abortRef.current = null;
     setBubble(null);
     setCard(null);
+    setWiki(null);
     setMenuOpen(false);
   }, []);
 
@@ -152,6 +198,42 @@ export default function TranslatePopup({
     },
     [closeAll, onOpenSettings, uiLang]
   );
+
+  // ---------- 发起 Wikipedia 名词解释请求 ----------
+
+  const runWiki = useCallback(
+    (info: SelectionInfo) => {
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      setBubble(null);
+      setCard(null);
+      setWiki({ info, status: "loading", result: null, errorDetail: null });
+      fetchWikipediaSummary(info.text, wikiLang(uiLang), ac.signal)
+        .then((result) => {
+          if (ac.signal.aborted) return;
+          setWiki({ info, status: "done", result, errorDetail: null });
+        })
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          const detail =
+            err instanceof Error && err.message ? err.message : "network";
+          setWiki({ info, status: "error", result: null, errorDetail: detail });
+        });
+    },
+    [uiLang]
+  );
+
+  /** 用系统默认浏览器打开条目（Tauri opener 插件；非 Tauri 环境回退 window.open） */
+  const handleOpenWiki = useCallback(async () => {
+    const url = wikiRef.current?.result?.url;
+    if (!url) return;
+    try {
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  }, []);
 
   // ---------- 模型切换（结果卡片头部下拉） ----------
 
@@ -211,8 +293,8 @@ export default function TranslatePopup({
 
     const onPointerUp = (e: PointerEvent) => {
       if (inPopup(e.target)) return;
-      // 卡片打开时点击卡片外 → 收起整个弹层
-      if (cardRef.current) {
+      // 卡片/Wikipedia 弹层打开时点击外部 → 收起整个弹层
+      if (cardRef.current || wikiRef.current) {
         closeAll();
         return;
       }
@@ -231,7 +313,13 @@ export default function TranslatePopup({
     };
     // 滚动不再收起弹层（保持翻译结果可见）；仅窗口缩放后选区矩形失效才收起
     const onResize = () => {
-      if (cardRef.current || bubbleRef.current) closeAll();
+      if (cardRef.current || bubbleRef.current || wikiRef.current) closeAll();
+    };
+    // 滚动页面：气泡 fixed 定位跟随选区，滚动后选区矩形失效 → 收起气泡；
+    // 已打开的结果卡片保持可见（用户既定行为）；弹层内部滚动（卡片内容）不触发
+    const onScroll = (e: Event) => {
+      if (inPopup(e.target)) return;
+      if (bubbleRef.current) setBubble(null);
     };
     // 单击选中文本内部时，Chromium 要等 mouseup 的默认行为才折叠选区，
     // pointerup 先读到旧选区导致气泡残留；这里监听选区折叠并兜底收起。
@@ -244,11 +332,13 @@ export default function TranslatePopup({
     document.addEventListener("pointerup", onPointerUp);
     document.addEventListener("keyup", onKeyUp);
     document.addEventListener("selectionchange", onSelectionChange);
+    document.addEventListener("scroll", onScroll, true); // 捕获阶段：读到 PDF 阅读区等所有滚动
     window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
   }, [closeAll, readSelection]);
@@ -273,19 +363,53 @@ export default function TranslatePopup({
     return d;
   })();
 
+  const wikiErrorText = (() => {
+    if (!wiki?.errorDetail) return "";
+    const d = wiki.errorDetail;
+    if (d === "not-found") return t("wikiNotFound");
+    if (d === "empty") return t("wikiEmpty");
+    if (d === "network") return t("aiErrorNetwork");
+    if (d.startsWith("http:")) return `${t("aiErrorHttp")} ${d.slice(5)}`;
+    return d;
+  })();
+
   return (
     <div ref={popupRef}>
-      {bubble && !card && (
-        <button
-          type="button"
-          className="tr-bubble"
+      {bubble && !card && !wiki && (
+        <div
+          className="tr-bubble-group"
           style={bubblePosition(bubble.rect)}
           onMouseDown={(e) => e.preventDefault() /* 保住选区不被清掉 */}
-          onClick={() => runTranslate(bubble, detectMode(bubble.text))}
         >
-          <LanguagesIcon size={13} />
-          <span>{t("aiTranslate")}</span>
-        </button>
+          <button
+            type="button"
+            className="tr-bubble"
+            title={t("copy")}
+            onClick={() => {
+              void copyText(bubble.text);
+              setBubble(null);
+            }}
+          >
+            <CopyIcon size={13} />
+            <span>{t("copy")}</span>
+          </button>
+          <button
+            type="button"
+            className="tr-bubble"
+            onClick={() => runTranslate(bubble, detectMode(bubble.text))}
+          >
+            <LanguagesIcon size={13} />
+            <span>{t("aiTranslate")}</span>
+          </button>
+          <button
+            type="button"
+            className="tr-bubble"
+            onClick={() => runWiki(bubble)}
+          >
+            <GlobeIcon size={13} />
+            <span>Wikipedia</span>
+          </button>
+        </div>
       )}
 
       {card && cardStyle && (
@@ -419,6 +543,77 @@ export default function TranslatePopup({
                   </>
                 )}
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {wiki && (
+        <div
+          className="tr-card"
+          style={cardPosition(wiki.info.rect)}
+          role="dialog"
+          aria-label="Wikipedia"
+        >
+          <div className="tr-card-header">
+            {wiki.status === "done" && wiki.result && (
+              <h3 className="tr-wiki-head-title" title={wiki.result.title}>
+                {wiki.result.title}
+              </h3>
+            )}
+            <div className="tr-spacer" />
+            <button
+              type="button"
+              className="tr-close"
+              onClick={closeAll}
+              aria-label={t("aiClose")}
+            >
+              <XIcon size={14} />
+            </button>
+          </div>
+
+          <div className="tr-card-body">
+            {wiki.status === "loading" && (
+              <div className="tr-loading">
+                <span className="spinner" />
+                <span>{t("wikiLoading")}</span>
+              </div>
+            )}
+
+            {wiki.status === "error" && (
+              <div className="tr-error">
+                <p>{wikiErrorText || t("aiErrorRequest")}</p>
+                <button
+                  type="button"
+                  className="tr-retry"
+                  onClick={() => runWiki(wiki.info)}
+                >
+                  {t("aiRetry")}
+                </button>
+              </div>
+            )}
+
+            {wiki.status === "done" && wiki.result && (
+              <div className="tr-wiki-content">
+                {wiki.result.thumbnail && (
+                  <img
+                    className="tr-wiki-thumb"
+                    src={wiki.result.thumbnail}
+                    alt=""
+                  />
+                )}
+                <p className="tr-wiki-extract">{wiki.result.extract}</p>
+                <div className="tr-wiki-actions">
+                  <button
+                    type="button"
+                    className="tr-wiki-link"
+                    onClick={handleOpenWiki}
+                  >
+                    {t("wikiOpen")}
+                  </button>
+                  <p className="tr-wiki-license">{wiki.result.license}</p>
+                </div>
+              </div>
             )}
           </div>
         </div>

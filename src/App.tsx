@@ -156,8 +156,12 @@ export default function App() {
     (async () => {
       const fn = await getCurrentWebview().onDragDropEvent((event) => {
         const payload = event.payload;
-        if (payload.type === "over" || payload.type === "enter") {
-          setDragOver(true);
+        if (payload.type === "enter") {
+          // 只对"含文件路径"的拖放显示提示：拖拽选中文本等 HTML5 内容时
+          // enter 事件的 paths 为空，不应触发"松开以打开文件"
+          setDragOver(payload.paths.length > 0);
+        } else if (payload.type === "over") {
+          // 悬停中（不带 paths）：保持当前状态
         } else if (payload.type === "leave") {
           setDragOver(false);
         } else if (payload.type === "drop") {

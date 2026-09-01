@@ -73,6 +73,12 @@ export const zh = {
     "兼容 OpenAI Chat Completions 协议（OpenAI / DeepSeek / Kimi / Ollama 等）。配置仅保存在本机，不会上传到任何服务器。",
   aiCancel: "取消",
   aiFillFirst: "请完整填写 Base URL、API Key 与模型名",
+  copy: "复制",
+  // Wikipedia 名词解释
+  wikiLoading: "正在获取 Wikipedia 摘要…",
+  wikiNotFound: "未找到相关条目",
+  wikiEmpty: "该条目没有可用的摘要内容",
+  wikiOpen: "在 Wikipedia 中打开",
 };
 
 export type LangKeys = keyof typeof zh;

@@ -75,4 +75,10 @@ export const ko: Record<LangKeys, string> = {
     "OpenAI Chat Completions 프로토콜과 호환 (OpenAI / DeepSeek / Kimi / Ollama 등). 설정은 이 기기에만 저장되며 업로드되지 않습니다.",
   aiCancel: "취소",
   aiFillFirst: "Base URL, API Key, 모델명을 모두 입력하세요",
+  copy: "복사",
+  // Wikipedia 용어 설명
+  wikiLoading: "Wikipedia 요약을 가져오는 중…",
+  wikiNotFound: "일치하는 문서를 찾을 수 없습니다",
+  wikiEmpty: "이 문서에는 요약이 없습니다",
+  wikiOpen: "Wikipedia에서 열기",
 };

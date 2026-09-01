@@ -75,4 +75,10 @@ export const fr: Record<LangKeys, string> = {
     "Compatible avec le protocole OpenAI Chat Completions (OpenAI / DeepSeek / Kimi / Ollama, etc.). Les paramètres sont stockés localement uniquement et jamais téléversés.",
   aiCancel: "Annuler",
   aiFillFirst: "Renseignez l'URL de base, la clé API et le nom du modèle",
+  copy: "Copier",
+  // Explication de terme Wikipédia
+  wikiLoading: "Récupération du résumé Wikipédia…",
+  wikiNotFound: "Aucun article correspondant trouvé",
+  wikiEmpty: "Aucun résumé disponible pour cet article",
+  wikiOpen: "Ouvrir dans Wikipédia",
 };
