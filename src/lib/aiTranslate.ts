@@ -195,7 +195,7 @@ export interface TranslateResult {
   raw?: string;
 }
 
-export class AiRequestError extends Error {}
+export class AiRequestError extends Error { }
 
 /** 可选的目标语言（翻译结果 / 词义解释用该语言输出） */
 export const TARGET_LANGS = [
@@ -249,7 +249,7 @@ function wordSystemPrompt(target: string): string {
     "Tasks:",
     "1. Locate the selected word/phrase in the context and determine its exact meaning as used there.",
     "2. List all of its common meanings, grouped by part of speech, ordered by frequency (max 8 senses).",
-    `Write "contextMeaning" and every "meaning" in ${target}. Keep "pos" concise (e.g. "n.", "v.", "adj.", "短语").`,
+    `Write "contextMeaning" and every "meaning" in ${target}. Keep "pos" concise (e.g. "n.", "v.", "adj.", "phrase").`,
     "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
     '{"query": string, "contextMeaning": string, "senses": [{"pos": string, "meaning": string}]}',
   ].join("\n");
@@ -261,7 +261,7 @@ function sentenceSystemPrompt(target: string): string {
     "The user selected a sentence (or passage); you are given the surrounding page text as context.",
     `Translate the selected text into ${target}.`,
     "Use the context to disambiguate pronouns, terminology and tone; keep the translation fluent and faithful.",
-    "If the selected text is already in the target language, produce a translation into the other language instead.",
+    "If the selected text is already in the target language, return it exactly as provided without any changes.",
     "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
     '{"translation": string}',
   ].join("\n");
@@ -411,17 +411,17 @@ export async function translateSelection(
   }
   const senses = Array.isArray(parsed.senses)
     ? (parsed.senses as unknown[])
-        .map((s) => {
-          if (typeof s === "string") return { meaning: s };
-          if (s && typeof s === "object") {
-            const o = s as Record<string, unknown>;
-            const meaning = pickString(o, "meaning") ?? pickString(o, "definition");
-            if (!meaning) return null;
-            return { pos: pickString(o, "pos") ?? pickString(o, "partOfSpeech"), meaning };
-          }
-          return null;
-        })
-        .filter((s): s is WordSense => s !== null)
+      .map((s) => {
+        if (typeof s === "string") return { meaning: s };
+        if (s && typeof s === "object") {
+          const o = s as Record<string, unknown>;
+          const meaning = pickString(o, "meaning") ?? pickString(o, "definition");
+          if (!meaning) return null;
+          return { pos: pickString(o, "pos") ?? pickString(o, "partOfSpeech"), meaning };
+        }
+        return null;
+      })
+      .filter((s): s is WordSense => s !== null)
     : [];
   return {
     mode,
