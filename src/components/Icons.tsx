@@ -183,6 +183,25 @@ export function LanguagesIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 勾选（lucide check） */
+export function CheckIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+/** 目录（lucide list） */
+export function ListIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M8 6h13M8 12h13M8 18h13" />
+      <path d="M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
+  );
+}
+
 /** 下拉箭头（lucide chevron-down） */
 export function ChevronDownIcon({ size = 16 }: IconProps) {
   return (

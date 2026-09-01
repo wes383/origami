@@ -29,6 +29,8 @@ export const ja: Record<LangKeys, string> = {
   recent: "最近開いたファイル",
   removeFromRecent: "最近のリストから削除",
   showInFolder: "フォルダを表示",
+  toc: "目次",
+  tocClose: "目次を閉じる",
   // AI 選択翻訳
   aiSettings: "AI 翻訳設定",
   aiTranslate: "AI 翻訳",

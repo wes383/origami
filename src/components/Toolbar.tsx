@@ -3,12 +3,14 @@ import { useI18n, UI_LANGS } from "../i18n";
 import type { ThemePref } from "../hooks/useTheme";
 import type { ViewMode } from "./PdfViewer";
 import {
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   DocIcon,
   FitPageIcon,
   FitWidthIcon,
   LanguagesIcon,
+  ListIcon,
   MinusIcon,
   PlusIcon,
   SettingsIcon,
@@ -42,6 +44,12 @@ interface ToolbarProps {
   onCloseFile: () => void;
   /** 打开 AI 翻译设置弹窗 */
   onOpenAiSettings: () => void;
+  /** 当前文档是否含目录 */
+  outlineAvailable: boolean;
+  /** 目录侧边栏是否展开 */
+  outlineOpen: boolean;
+  /** 切换目录侧边栏 */
+  onToggleOutline: () => void;
   disabled: boolean;
 }
 
@@ -65,6 +73,9 @@ export default function Toolbar({
   onOpen,
   onCloseFile,
   onOpenAiSettings,
+  outlineAvailable,
+  outlineOpen,
+  onToggleOutline,
   disabled,
 }: ToolbarProps) {
   const { t, lang, setLang } = useI18n();
@@ -205,20 +216,33 @@ export default function Toolbar({
                 </button>
               )}
 
-              <button
-                type="button"
-                className="tb-dropdown-item"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onOpenAiSettings();
-                }}
-              >
-                <LanguagesIcon />
-                <span>{t("aiSettings")}</span>
-              </button>
+              {!disabled && outlineAvailable && (
+                <>
+                  <div className="tb-dropdown-separator" />
 
-              <div className="tb-dropdown-separator" />
+                  {/* 目录侧边栏开关（仅当前文档含目录时提供） */}
+                  <button
+                    type="button"
+                    className={`tb-dropdown-item ${outlineOpen ? "is-active" : ""}`}
+                    role="menuitemcheckbox"
+                    aria-checked={outlineOpen}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onToggleOutline();
+                    }}
+                  >
+                    <ListIcon />
+                    <span>{t("toc")}</span>
+                    {outlineOpen && (
+                      <span className="tb-item-check">
+                        <CheckIcon size={14} />
+                      </span>
+                    )}
+                  </button>
+
+                  <div className="tb-dropdown-separator" />
+                </>
+              )}
 
               <div className="tb-dropdown-label">{t("viewMode")}</div>
               <div className="tb-dropdown-row">
@@ -325,8 +349,6 @@ export default function Toolbar({
                 )}
               </div>
 
-              <div className="tb-dropdown-separator" />
-
               <div className="tb-dropdown-label">{t("theme")}</div>
               <div className="tb-dropdown-row">
                 <button
@@ -357,6 +379,21 @@ export default function Toolbar({
                   {t("systemTheme")}
                 </button>
               </div>
+
+              <div className="tb-dropdown-separator" />
+
+              <button
+                type="button"
+                className="tb-dropdown-item"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenAiSettings();
+                }}
+              >
+                <LanguagesIcon />
+                <span>{t("aiSettings")}</span>
+              </button>
             </div>
           )}
         </div>

@@ -29,6 +29,8 @@ export const de: Record<LangKeys, string> = {
   recent: "Zuletzt geöffnet",
   removeFromRecent: "Aus den letzten Dateien entfernen",
   showInFolder: "Im Ordner anzeigen",
+  toc: "Inhaltsverzeichnis",
+  tocClose: "Inhaltsverzeichnis schließen",
   // KI-Auswahlübersetzung
   aiSettings: "KI-Übersetzungseinstellungen",
   aiTranslate: "KI-Übersetzen",

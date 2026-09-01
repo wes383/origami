@@ -29,6 +29,8 @@ export const ru: Record<LangKeys, string> = {
   recent: "Недавние",
   removeFromRecent: "Убрать из недавних",
   showInFolder: "Показать в папке",
+  toc: "Содержание",
+  tocClose: "Закрыть содержание",
   // Перевод выделенного с помощью ИИ
   aiSettings: "Настройки перевода ИИ",
   aiTranslate: "Перевод ИИ",

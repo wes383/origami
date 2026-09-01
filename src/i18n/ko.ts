@@ -29,6 +29,8 @@ export const ko: Record<LangKeys, string> = {
   recent: "최근 파일",
   removeFromRecent: "최근 목록에서 제거",
   showInFolder: "폴더 열기",
+  toc: "목차",
+  tocClose: "목차 닫기",
   // AI 선택 번역
   aiSettings: "AI 번역 설정",
   aiTranslate: "AI 번역",

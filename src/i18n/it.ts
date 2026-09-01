@@ -29,6 +29,8 @@ export const it: Record<LangKeys, string> = {
   recent: "Recenti",
   removeFromRecent: "Rimuovi dai recenti",
   showInFolder: "Mostra nella cartella",
+  toc: "Indice",
+  tocClose: "Chiudi l'indice",
   // Traduzione della selezione con IA
   aiSettings: "Impostazioni di traduzione IA",
   aiTranslate: "Traduci con IA",

@@ -3,8 +3,8 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import type { OpenedPdf } from "./lib/pdf";
-import { openPdf } from "./lib/pdf";
+import type { OpenedPdf, OutlineNode } from "./lib/pdf";
+import { openPdf, loadOutline } from "./lib/pdf";
 import { useI18n, type LangKeys } from "./i18n";
 import { useTheme } from "./hooks/useTheme";
 import {
@@ -15,6 +15,7 @@ import {
 } from "./lib/recent";
 import Toolbar from "./components/Toolbar";
 import PdfViewer, { type ViewMode } from "./components/PdfViewer";
+import OutlinePanel from "./components/OutlinePanel";
 import TranslatePopup from "./components/TranslatePopup";
 import AiSettingsModal from "./components/AiSettingsModal";
 import EmptyState from "./components/EmptyState";
@@ -65,6 +66,10 @@ export default function App() {
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => loadRecent());
   /** AI 划词翻译设置弹窗 */
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  /** 当前文档的目录树 */
+  const [outline, setOutline] = useState<OutlineNode[]>([]);
+  /** 目录侧边栏展开状态 */
+  const [outlineOpen, setOutlineOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -114,6 +119,11 @@ export default function App() {
       setScale(1);
       setFileName(path.split(/[\\/]/).pop() ?? path);
       setRecentFiles(addRecent(path));
+      // 解析目录（失败不阻塞打开文档）
+      const parsedOutline = await loadOutline(opened.doc).catch(() => []);
+      setOutline(parsedOutline);
+      // 含目录的文档默认展开侧边栏，便于导航
+      setOutlineOpen(parsedOutline.length > 0);
     } catch {
       setErrorKey("errorInvalid");
     } finally {
@@ -146,6 +156,8 @@ export default function App() {
     setScaleMode("fit-width");
     setScale(1);
     setErrorKey(null);
+    setOutline([]);
+    setOutlineOpen(false);
   }, []);
 
   // ---------- 禁用右键菜单（阅读器场景） ----------
@@ -347,26 +359,42 @@ export default function App() {
         onOpen={handleOpenDialog}
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
+        outlineAvailable={outline.length > 0}
+        outlineOpen={outlineOpen}
+        onToggleOutline={() => setOutlineOpen((v) => !v)}
         disabled={!pdf}
       />
 
       <main className="reader">
         {pdf && basePage ? (
-          <PdfViewer
-            key={`${fileName}-${viewMode === "single" ? "s" : "c"}`}
-            doc={pdf.doc}
-            numPages={numPages}
-            viewMode={viewMode}
-            currentPage={currentPage}
-            onCurrentPageChange={handlePageChange}
-            jumpTarget={jumpTarget}
-            onJumpHandled={handleJumpHandled}
-            effScale={effScale}
-            onZoomStep={stepZoom}
-            onWidthChange={setContainerWidth}
-            onHeightChange={setContainerHeight}
-            basePage={basePage}
-          />
+          <div className={`reader-body ${outlineOpen && outline.length > 0 ? "with-outline" : ""}`}>
+            {outlineOpen && outline.length > 0 && (
+              <OutlinePanel
+                key={fileName}
+                outline={outline}
+                currentPage={currentPage}
+                onNavigate={goToPage}
+                onClose={() => setOutlineOpen(false)}
+              />
+            )}
+            <div className="reader-main">
+              <PdfViewer
+                key={`${fileName}-${viewMode === "single" ? "s" : "c"}`}
+                doc={pdf.doc}
+                numPages={numPages}
+                viewMode={viewMode}
+                currentPage={currentPage}
+                onCurrentPageChange={handlePageChange}
+                jumpTarget={jumpTarget}
+                onJumpHandled={handleJumpHandled}
+                effScale={effScale}
+                onZoomStep={stepZoom}
+                onWidthChange={setContainerWidth}
+                onHeightChange={setContainerHeight}
+                basePage={basePage}
+              />
+            </div>
+          </div>
         ) : (
           <EmptyState
             onOpen={handleOpenDialog}
