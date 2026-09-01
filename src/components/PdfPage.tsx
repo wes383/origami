@@ -9,6 +9,11 @@ import {
   bindTextLayerSelection,
   unbindTextLayerSelection,
 } from "../lib/textLayerSelection";
+import {
+  getPdfLinkOverlays,
+  type PdfDestination,
+  type PdfLinkOverlay,
+} from "../lib/pdfLinks";
 
 interface PdfPageProps {
   doc: PDFDocumentProxy;
@@ -26,6 +31,10 @@ interface PdfPageProps {
   highlights: SearchRect[];
   /** 当前选中匹配 id（用于强调样式与滚动定位） */
   activeHighlightId: string | null;
+  /** 点击 PDF 内部链接时导航到目标位置 */
+  onInternalLink: (destination: PdfDestination) => void;
+  /** 点击外部链接时交给宿主环境打开 */
+  onExternalLink: (url: string) => void;
 }
 
 /**
@@ -55,12 +64,15 @@ function PdfPage({
   visible,
   highlights,
   activeHighlightId,
+  onInternalLink,
+  onExternalLink,
 }: PdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const [rendered, setRendered] = useState(false);
   /** 本页真实尺寸（渲染后回填，替代按首页估算的占位值） */
   const [actualSize, setActualSize] = useState<{ w: number; h: number } | null>(null);
+  const [links, setLinks] = useState<PdfLinkOverlay[]>([]);
 
   useEffect(() => {
     // 倍率/文档变化时先清空旧文本层：其 span 按百分比定位，倍率变了会错位
@@ -69,6 +81,7 @@ function PdfPage({
       container.replaceChildren();
       container.style.removeProperty("--total-scale-factor");
     }
+    setLinks([]);
     if (!visible) return;
     let cancelled = false;
     let renderTask: { cancel(): void } | null = null;
@@ -83,6 +96,8 @@ function PdfPage({
           scale,
           rotation: (page.rotate + rotation) % 360,
         });
+        // 链接注释与页面渲染并行读取；后续按同一个 viewport 生成命中区域。
+        const annotationsPromise = page.getAnnotations().catch(() => []);
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -135,6 +150,10 @@ function PdfPage({
         });
         await textLayer.render();
         if (cancelled) return;
+
+        const annotations = await annotationsPromise;
+        if (cancelled) return;
+        setLinks(getPdfLinkOverlays(annotations, viewport));
 
         // endOfContent + 全局选区监听：修复"拖到空白区域意外选中大段文字 /
         // 选区被取消"（pdf.js 官方 viewer 同款方案，见 lib/textLayerSelection.ts）
@@ -189,6 +208,34 @@ function PdfPage({
         </div>
       )}
       <div ref={textLayerRef} className="pdf-text-layer" />
+      {links.length > 0 && (
+        <div className="pdf-link-layer">
+          {links.map((link) => (
+            <a
+              key={link.id}
+              className="pdf-link"
+              href={link.url ?? "#"}
+              title={link.url ?? "跳转到文档内位置"}
+              aria-label={link.url ?? "跳转到文档内位置"}
+              rel={link.url ? "noopener noreferrer" : undefined}
+              style={{
+                left: link.left,
+                top: link.top,
+                width: link.width,
+                height: link.height,
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (link.url) onExternalLink(link.url);
+                else if (link.destination) onInternalLink(link.destination);
+              }}
+            />
+          ))}
+        </div>
+      )}
       {!rendered && (
         <div className="pdf-page-placeholder" aria-hidden="true">
           <span>{pageNumber}</span>

@@ -7,8 +7,13 @@ import {
 } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { SearchMatch, SearchRect } from "../lib/search";
+import {
+  getDestinationViewportPoint,
+  type PdfDestination,
+} from "../lib/pdfLinks";
 import PdfPage from "./PdfPage";
 import { useVisiblePages } from "../hooks/useVisiblePages";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 /** 页面布局：每屏一页还是一对页 */
 export type PageLayout = "single" | "double";
@@ -78,6 +83,11 @@ export default function PdfViewer({
   const suppressTrackRef = useRef(false);
   /** 上一次生效倍率：区分"初始渲染"与"fit 倍率变化需锚定当前页" */
   const prevScaleRef = useRef<number | null>(null);
+  /** 翻页模式中等待目标页挂载后再执行的内部链接定位。 */
+  const pendingDestinationRef = useRef<{
+    pageNumber: number;
+    destination: unknown[];
+  } | null>(null);
 
   const handleVisiblePage = useCallback(
     (page: number) => {
@@ -309,6 +319,109 @@ export default function PdfViewer({
     };
   }, [jumpTarget, flipMode, doc, onJumpHandled]);
 
+  /** 将已解析的内部目标滚动到对应页面的精确位置。 */
+  const scrollToDestination = useCallback(
+    async (pageNumber: number, destination: unknown[]) => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      try {
+        const page = await doc.getPage(pageNumber);
+        const viewport = page.getViewport({
+          scale: effScale,
+          rotation: (page.rotate + rotation) % 360,
+        });
+        const point = getDestinationViewportPoint(destination, page.view, viewport);
+
+        const align = () => {
+          const pageNode = container.querySelector<HTMLElement>(
+            `[data-page="${pageNumber}"] .pdf-page`
+          );
+          if (!pageNode) return;
+          const pageRect = pageNode.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const scaleX = pageNode.clientWidth / viewport.width;
+          const scaleY = pageNode.clientHeight / viewport.height;
+          container.scrollTo({
+            left: Math.max(
+              0,
+              container.scrollLeft + pageRect.left - containerRect.left + point.left * scaleX
+            ),
+            top: Math.max(
+              0,
+              container.scrollTop + pageRect.top - containerRect.top + point.top * scaleY
+            ),
+            behavior: "auto",
+          });
+        };
+
+        // 初次将目标页滚入可见区，随后等懒渲染回填真实页面尺寸后再精确对齐一次。
+        align();
+        requestAnimationFrame(() => requestAnimationFrame(align));
+      } catch {
+        /* 无效目标不影响继续阅读 */
+      }
+    },
+    [doc, effScale, rotation]
+  );
+
+  /** 解析命名/显式内部链接，并在保留当前缩放的前提下定位。 */
+  const handleInternalLink = useCallback(
+    async (destination: PdfDestination) => {
+      try {
+        const explicit =
+          typeof destination === "string"
+            ? await doc.getDestination(destination)
+            : destination;
+        if (!Array.isArray(explicit)) return;
+
+        const pageRef = explicit[0];
+        const pageNumber =
+          typeof pageRef === "number"
+            ? pageRef + 1
+            : pageRef && typeof pageRef === "object"
+              ? (await doc.getPageIndex(
+                  pageRef as Parameters<typeof doc.getPageIndex>[0]
+                )) + 1
+              : null;
+        if (!pageNumber || pageNumber < 1 || pageNumber > numPages) return;
+
+        if (flipMode === "paged" && pageNumber !== currentPage) {
+          pendingDestinationRef.current = { pageNumber, destination: explicit };
+          onCurrentPageChange(pageNumber);
+        } else {
+          void scrollToDestination(pageNumber, explicit);
+        }
+      } catch {
+        /* 命名目标不存在或解析失败时静默忽略 */
+      }
+    },
+    [currentPage, doc, flipMode, numPages, onCurrentPageChange, scrollToDestination]
+  );
+
+  useLayoutEffect(() => {
+    const pending = pendingDestinationRef.current;
+    if (!pending || pending.pageNumber !== currentPage) return;
+    pendingDestinationRef.current = null;
+    void scrollToDestination(pending.pageNumber, pending.destination);
+  }, [currentPage, scrollToDestination]);
+
+  /** 外部链接仅允许常用安全协议，优先用 Tauri 调起系统默认浏览器。 */
+  const handleExternalLink = useCallback(async (url: string) => {
+    try {
+      const protocol = new URL(url).protocol;
+      if (!["http:", "https:", "mailto:"].includes(protocol)) return;
+    } catch {
+      return;
+    }
+
+    try {
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  }, []);
+
   // 占位尺寸：90°/270° 旋转时宽高互换
   const rotated = rotation % 180 !== 0;
   const pw = (rotated ? basePage.h : basePage.w) * effScale;
@@ -371,6 +484,8 @@ export default function PdfViewer({
       visible={visible}
       highlights={rectsByPage.get(page) ?? EMPTY_RECTS}
       activeHighlightId={activeMatchId}
+      onInternalLink={handleInternalLink}
+      onExternalLink={handleExternalLink}
     />
   );
 
