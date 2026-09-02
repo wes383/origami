@@ -57,7 +57,7 @@ export function loadProgress(path: string): ReadProgress | null {
   if (!entry || typeof entry.page !== "number") return null;
   return {
     page: entry.page,
-    scaleMode: entry.scaleMode ?? "fit-width",
+    scaleMode: entry.scaleMode ?? "custom",
     scale: entry.scale ?? 1,
     fitIntent: entry.fitIntent ?? "fit-page",
     rotation: entry.rotation ?? 0,

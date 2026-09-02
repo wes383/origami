@@ -23,6 +23,7 @@ import {
   removeRecent,
   type RecentFile,
 } from "./lib/recent";
+import { takeStartupFile, onOpenFile } from "./lib/startupFile";
 import Toolbar from "./components/Toolbar";
 import PdfViewer, { type PageLayout, type FlipMode } from "./components/PdfViewer";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
@@ -93,7 +94,7 @@ export default function App() {
   );
   /** 打印对话框（选择页码范围） */
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
-  const [scaleMode, setScaleMode] = useState<ScaleMode>("fit-width");
+  const [scaleMode, setScaleMode] = useState<ScaleMode>("custom");
   /**
    * 用户最后选择的 fit 模式（fit-width / fit-page）。
    * 点击 fit 按钮后 scaleMode 固定为 custom（切页不再自动调整），
@@ -445,6 +446,22 @@ export default function App() {
     return () => {
       disposed = true;
       unlisten?.();
+    };
+  }, []);
+
+  // ---------- 双击 PDF 文件启动 ----------
+  // 首个实例读命令行参数；后续实例由单实例插件转发 open-file 事件
+
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      const path = await takeStartupFile();
+      if (!disposed && path) loadFileRef.current(path);
+    })();
+    const unlisten = onOpenFile((path) => loadFileRef.current(path));
+    return () => {
+      disposed = true;
+      void unlisten.then((fn) => fn());
     };
   }, []);
 
