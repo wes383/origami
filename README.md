@@ -2,6 +2,8 @@
 
 A clean desktop PDF reader built with Tauri v2 + React + TypeScript. Tailored for the Windows platform.
 
+English | [简体中文](README.zh-CN.md)
+
 ## Features
 
 - **Reading**: page navigation, wheel zoom, fit width/page, single/double page layout, scroll/flip mode, rotation
