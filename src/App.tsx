@@ -100,7 +100,7 @@ export default function App() {
    * 点击 fit 按钮后 scaleMode 固定为 custom（切页不再自动调整），
    * 但仍依据此状态在两种模式间来回切换
    */
-  const [fitIntent, setFitIntent] = useState<FitIntent>("fit-page");
+  const [fitIntent, setFitIntent] = useState<FitIntent>("fit-width");
   const [scale, setScale] = useState(1);
   const [fitScale, setFitScale] = useState(1);
   const [fitPageScale, setFitPageScale] = useState(1);
@@ -301,7 +301,7 @@ export default function App() {
         // 恢复上次的视图偏好；无记录时默认固定 100%（不再自适应）
         const sm = restored?.scaleMode ?? "custom";
         setScaleMode(sm);
-        setFitIntent(restored?.fitIntent ?? "fit-page");
+        setFitIntent(restored?.fitIntent ?? "fit-width");
         setScale(restored?.scale ?? 1);
         setRotation(restored?.rotation ?? 0);
         setPageLayout(restored?.pageLayout ?? "single");
@@ -705,13 +705,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [pdf]);
 
-  // ---------- 键盘（翻页模式整页翻动，双页按对翻；滚动模式走原生滚动） ----------
+  // ---------- 键盘（← / → 通用整页翻动，双页按对翻；其余仅翻页模式，滚动模式走原生滚动） ----------
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!pdf || flipMode !== "paged") return;
+      if (!pdf) return;
       if (e.target instanceof HTMLInputElement) return;
       const step = pageLayout === "double" ? 2 : 1;
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        goToPage(currentPage + (e.key === "ArrowRight" ? step : -step));
+        return;
+      }
+      if (flipMode !== "paged") return;
       if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
         e.preventDefault();
         goToPage(currentPage + step);
@@ -797,6 +803,18 @@ export default function App() {
         return;
       }
 
+      // Esc 退出全屏（仅全屏时触发；各弹窗自带的 Esc 关闭不受影响）
+      if (e.key === "Escape" && isFullscreen) {
+        e.preventDefault();
+        const win = getCurrentWindow();
+        win
+          .setFullscreen(false)
+          .then(() => win.isFullscreen())
+          .then(setIsFullscreen)
+          .catch(() => {});
+        return;
+      }
+
       if (!pdf) return; // 以下需已打开文档
       const key = e.key.toLowerCase();
       if (key === "r") {
@@ -811,6 +829,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     pdf,
+    isFullscreen,
     sidebarOpen,
     sidebarTab,
     handleOpenDialog,

@@ -119,15 +119,9 @@ export default function PdfViewer({
   }, [onWidthChange, onHeightChange, doc]);
 
   // Ctrl+滚轮缩放（WebView2 中触屏捏合也表现为 ctrl+wheel）
-  // 翻页模式：滚到顶/底后再滚，切换上一页/下一页（双页按对翻）
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
-    /** 连续触发的 wheel 事件视为一次滚动意图（触控板惯性/高速滚动） */
-    let wheelIntentTimer = 0;
-    let intentConsumed = false;
-    const INTENT_WINDOW = 120;
 
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -142,38 +136,18 @@ export default function PdfViewer({
           cy: (el.scrollTop + my) / effScale,
         };
         onZoomStep(e.deltaY < 0 ? 1 : -1);
-        return;
       }
-
-      if (flipMode !== "paged") return;
-      // 页面尚可滚动时交给原生滚动
-      const atTop = el.scrollTop <= 0;
-      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-      if (e.deltaY < 0 && !atTop) return;
-      if (e.deltaY > 0 && !atBottom) return;
-      // 到达边界：拦截并翻页。快速连续滚动（触控板惯性）只翻一次
-      e.preventDefault();
-      const now = performance.now();
-      if (now - wheelIntentTimer > INTENT_WINDOW) {
-        intentConsumed = false;
-        wheelIntentTimer = now;
-      }
-      if (intentConsumed) return;
-      intentConsumed = true;
-      const step = pageLayout === "double" ? 2 : 1;
-      onCurrentPageChange(e.deltaY > 0 ? currentPage + step : currentPage - step);
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       el.removeEventListener("wheel", onWheel);
-      window.clearTimeout(wheelIntentTimer);
     };
-  }, [effScale, onZoomStep, flipMode, pageLayout, currentPage, onCurrentPageChange]);
+  }, [effScale, onZoomStep]);
 
   // 翻页模式：翻页后回到页面顶部。
-  // wheel 翻页发生在旧页已滚到底部时，容器 scrollTop 保留旧值，
-  // 新页挂载后若不重置，会停留在新页的底部/中间位置。
+  // 键盘/按钮翻页后容器 scrollTop 保留旧值，新页挂载后若不重置，
+  // 会停留在新页的底部/中间位置。
   useEffect(() => {
     if (flipMode !== "paged") return;
     const el = containerRef.current;

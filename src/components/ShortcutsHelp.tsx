@@ -19,6 +19,8 @@ const ROWS: Row[] = [
   { keys: "Ctrl + F", descKey: "search" },
   { keys: "Ctrl + \\", descKey: "shortcutSidebar" },
   { keys: "Ctrl + T", descKey: "shortcutTranslateSidebar" },
+  { keys: "←", descKey: "prevPage" },
+  { keys: "→", descKey: "nextPage" },
   { keys: "Ctrl + +", descKey: "zoomIn" },
   { keys: "Ctrl + -", descKey: "zoomOut" },
   { keys: "Ctrl + 0", descKey: "shortcutZoomReset" },
@@ -27,6 +29,7 @@ const ROWS: Row[] = [
   { keys: "T", descKey: "aiTranslate", selection: true },
   { keys: "W", descKey: "shortcutWikipedia", selection: true },
   { keys: "F11", descKey: "shortcutFullscreen" },
+  { keys: "Esc", descKey: "exitFullscreen" },
   { keys: "?", descKey: "shortcutHelp" },
 ];
 
