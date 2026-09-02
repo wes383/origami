@@ -1381,11 +1381,12 @@ button:disabled {
   -webkit-user-select: none;
 }
 
-/* 选区背景：不区分主题，一律按白纸配色（见上方 color-scheme 注释）。
-   alpha 取中等值——跨行选区相邻 span 的盒子会重叠，太实会叠出深色带 */
+/* 原生选区背景关闭：一行常被拆成多个 span（中英混排尤甚），相邻 span 盒子
+   轻微重叠，半透明 ::selection 各自绘制会叠出深色带与错位边缘。
+   选区高亮改由 .pdf-sel-layer 自绘（lib/textLayerSelection.ts 按行合并矩形）。
+   color 保持透明：选中时也不让文本层字形显形（看到的是 canvas 位图） */
 .pdf-text-layer ::selection {
-  background: rgba(0, 100, 255, 0.22);
-  background: color-mix(in srgb, AccentColor, transparent 72%);
+  background: transparent;
   color: transparent;
 }
 
@@ -1435,6 +1436,22 @@ button:disabled {
 
 .pdf-text-layer.selecting .endOfContent {
   top: 0;
+}
+
+/* 选区高亮自绘层：搜索高亮层与文本层之间，不拦截鼠标。
+   矩形由 JS 按 range client rect 合并同行重叠后写入（百分比定位，缩放自适应），
+   每行至多一块，因此不会出现原生 ::selection 的叠色带 */
+.pdf-sel-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pdf-sel-rect {
+  position: absolute;
+  background: rgba(0, 100, 255, 0.22);
+  background: color-mix(in srgb, AccentColor, transparent 72%);
+  border-radius: 1px;
 }
 
 .pdf-page-placeholder {

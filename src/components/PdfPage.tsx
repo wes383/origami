@@ -207,6 +207,9 @@ function PdfPage({
           })}
         </div>
       )}
+      {/* 选区高亮层：由 lib/textLayerSelection.ts 自绘（按行合并矩形后单层绘制，
+          避免原生 ::selection 在重叠 span 上叠色）；百分比定位，缩放自适应 */}
+      <div className="pdf-sel-layer" aria-hidden="true" />
       <div ref={textLayerRef} className="pdf-text-layer" />
       {links.length > 0 && (
         <div className="pdf-link-layer">
