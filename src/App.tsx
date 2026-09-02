@@ -298,8 +298,8 @@ export default function App() {
         pageSizesRef.current = new Map([[1, { w: vp.width, h: vp.height }]]);
         setRefPage({ w: vp.width, h: vp.height });
 
-        // 恢复上次的视图偏好；无记录时默认「适合页面」（P0-4：按钮首显适合页面）
-        const sm = restored?.scaleMode ?? "fit-width";
+        // 恢复上次的视图偏好；无记录时默认固定 100%（不再自适应）
+        const sm = restored?.scaleMode ?? "custom";
         setScaleMode(sm);
         setFitIntent(restored?.fitIntent ?? "fit-page");
         setScale(restored?.scale ?? 1);
@@ -383,7 +383,7 @@ export default function App() {
     setBasePage(null);
     setRefPage(null);
     pageSizesRef.current = new Map();
-    setScaleMode("fit-width");
+    setScaleMode("custom");
     setScale(1);
     setFitScale(1);
     setFitPageScale(1);
