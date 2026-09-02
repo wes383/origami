@@ -21,9 +21,10 @@
  *    合并后，在 canvas 与文本层之间的 .pdf-sel-layer 单层绘制。
  *
  * 3. 三击选段。span 全部绝对定位，浏览器把每个 span 当独立块，原生三击只能
- *    选中一个 span（约一行）。mousedown detail >= 3 时自行按视觉行分组，
- *    从点击行向上下扩展到段落边界（行距过大 / 上一行是段尾短行 / 下一行
- *    首行缩进即停），再整体写入 Selection。
+ *    选中一个 span（约一行）。mousedown detail >= 3 时自行按行分组（矩形先
+ *    换算回未旋转的层内坐标，旋转页同样成立），从点击行向上下扩展到段落
+ *    边界（行距过大 / 上一行是段尾短行 / 下一行首行缩进即停），再整体写入
+ *    Selection。
  */
 
 interface LayerEntry {
@@ -179,6 +180,120 @@ function enableGlobalSelectionListener(): void {
 }
 
 /* ==========================================================================
+   旋转适配：viewport 坐标 ⇄ 未旋转的层内局部坐标
+   ========================================================================== */
+
+interface Mapper {
+  /** 文本层视觉包围盒（viewport 坐标，随旋转变化） */
+  visual: RectBox;
+  /** viewport 矩形 → 层内局部坐标（未旋转，PDF 文本空间） */
+  toLocal(r: RectBox): RectBox;
+  /** 层内局部坐标 → viewport 矩形 */
+  toVisual(r: RectBox): RectBox;
+  pointToLocal(x: number, y: number): { x: number; y: number };
+}
+
+/**
+ * 文本层整体被 CSS 旋转（transform: rotate(...)）以对齐旋转后的 canvas，于是
+ * span / 选区的 client 矩形都是旋转后的轴对齐包围盒：90°/270° 时"行"在屏幕上
+ * 变成竖直方向，按视觉 y 重叠分行会把整页并成一块（三击选段就会选中整页）。
+ *
+ * 这里按 pdf.js 自己的映射（text_layer.mjs convertMatches 同款）把矩形换算回
+ * 未旋转的层内局部坐标 —— 局部空间里行永远是水平的，分行与段落判断统一生效。
+ * `data-main-rotation` 仅在 rotation ≠ 0 时由 pdf.js 写入，缺失即视为 0。
+ */
+function getMapper(div: HTMLElement): Mapper | null {
+  const b = div.getBoundingClientRect();
+  const lw = div.offsetWidth;
+  const lh = div.offsetHeight;
+  if (b.width < 1 || b.height < 1 || lw < 1 || lh < 1) return null;
+  const rot = Number(div.dataset.mainRotation ?? "0") || 0;
+  const visual: RectBox = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+  const toLocal = (r: RectBox): RectBox => {
+    const u0 = (r.left - b.left) / b.width;
+    const u1 = (r.right - b.left) / b.width;
+    const v0 = (r.top - b.top) / b.height;
+    const v1 = (r.bottom - b.top) / b.height;
+    let s0: number;
+    let s1: number;
+    let t0: number;
+    let t1: number;
+    switch (rot) {
+      case 90:
+        s0 = v0;
+        s1 = v1;
+        t0 = 1 - u1;
+        t1 = 1 - u0;
+        break;
+      case 180:
+        s0 = 1 - u1;
+        s1 = 1 - u0;
+        t0 = 1 - v1;
+        t1 = 1 - v0;
+        break;
+      case 270:
+        s0 = 1 - v1;
+        s1 = 1 - v0;
+        t0 = u0;
+        t1 = u1;
+        break;
+      default:
+        s0 = u0;
+        s1 = u1;
+        t0 = v0;
+        t1 = v1;
+    }
+    return { left: s0 * lw, top: t0 * lh, right: s1 * lw, bottom: t1 * lh };
+  };
+  const toVisual = (r: RectBox): RectBox => {
+    const s0 = r.left / lw;
+    const s1 = r.right / lw;
+    const t0 = r.top / lh;
+    const t1 = r.bottom / lh;
+    let u0: number;
+    let u1: number;
+    let v0: number;
+    let v1: number;
+    switch (rot) {
+      case 90:
+        u0 = 1 - t1;
+        u1 = 1 - t0;
+        v0 = s0;
+        v1 = s1;
+        break;
+      case 180:
+        u0 = 1 - s1;
+        u1 = 1 - s0;
+        v0 = 1 - t1;
+        v1 = 1 - t0;
+        break;
+      case 270:
+        u0 = t0;
+        u1 = t1;
+        v0 = 1 - s1;
+        v1 = 1 - s0;
+        break;
+      default:
+        u0 = s0;
+        u1 = s1;
+        v0 = t0;
+        v1 = t1;
+    }
+    return {
+      left: b.left + u0 * b.width,
+      top: b.top + v0 * b.height,
+      right: b.left + u1 * b.width,
+      bottom: b.top + v1 * b.height,
+    };
+  };
+  const pointToLocal = (x: number, y: number) => {
+    const r = toLocal({ left: x, top: y, right: x, bottom: y });
+    return { x: r.left, y: r.top };
+  };
+  return { visual, toLocal, toVisual, pointToLocal };
+}
+
+/* ==========================================================================
    选区高亮自绘
    ========================================================================== */
 
@@ -244,12 +359,15 @@ function mergeSelectionRects(rects: RectBox[]): RectBox[] {
 }
 
 function paintSelection(): void {
-  const layers: { div: HTMLElement; paint: HTMLElement | null }[] = [];
+  // 每页先清空，再按页收集 → 局部合并 → 换回视觉坐标绘制。
+  // 按页分别合并：跨页选区不会被并成一块，旋转页也能按层内行正确分行。
+  const layers: { m: Mapper; paint: HTMLElement | null }[] = [];
   for (const div of textLayers.keys()) {
     const paint =
       div.parentElement?.querySelector<HTMLElement>(".pdf-sel-layer") ?? null;
     paint?.replaceChildren();
-    layers.push({ div, paint });
+    const m = getMapper(div);
+    if (m) layers.push({ m, paint });
   }
   const selection = document.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
@@ -263,28 +381,35 @@ function paintSelection(): void {
   }
   if (!rects.length) return;
 
-  for (const line of mergeSelectionRects(rects)) {
-    const cx = (line.left + line.right) / 2;
-    const cy = (line.top + line.bottom) / 2;
-    for (const { div, paint } of layers) {
-      if (!paint) continue;
-      const lb = div.getBoundingClientRect();
-      if (cx < lb.left || cx > lb.right || cy < lb.top || cy > lb.bottom) continue;
-      // 裁剪到层盒内（防 endOfContent 等越界矩形）
-      const left = Math.max(line.left, lb.left);
-      const right = Math.min(line.right, lb.right);
-      const top = Math.max(line.top, lb.top);
-      const bottom = Math.min(line.bottom, lb.bottom);
-      if (right - left < 1 || bottom - top < 1) break;
+  for (const { m, paint } of layers) {
+    if (!paint) continue;
+    const vb = m.visual;
+    const vw = vb.right - vb.left;
+    const vh = vb.bottom - vb.top;
+    const local: RectBox[] = [];
+    for (const r of rects) {
+      const cx = (r.left + r.right) / 2;
+      const cy = (r.top + r.bottom) / 2;
+      if (cx < vb.left || cx > vb.right || cy < vb.top || cy > vb.bottom) continue;
+      local.push(m.toLocal(r));
+    }
+    if (!local.length) continue;
+    for (const line of mergeSelectionRects(local)) {
+      const v = m.toVisual(line);
+      // 裁剪到视觉盒内（防 endOfContent 等越界矩形）
+      const left = Math.max(v.left, vb.left);
+      const right = Math.min(v.right, vb.right);
+      const top = Math.max(v.top, vb.top);
+      const bottom = Math.min(v.bottom, vb.bottom);
+      if (right - left < 1 || bottom - top < 1) continue;
       const el = document.createElement("div");
       el.className = "pdf-sel-rect";
       // 百分比定位：页盒随缩放变化时无需重算
-      el.style.left = `${((left - lb.left) / lb.width) * 100}%`;
-      el.style.top = `${((top - lb.top) / lb.height) * 100}%`;
-      el.style.width = `${((right - left) / lb.width) * 100}%`;
-      el.style.height = `${((bottom - top) / lb.height) * 100}%`;
+      el.style.left = `${((left - vb.left) / vw) * 100}%`;
+      el.style.top = `${((top - vb.top) / vh) * 100}%`;
+      el.style.width = `${((right - left) / vw) * 100}%`;
+      el.style.height = `${((bottom - top) / vh) * 100}%`;
       paint.appendChild(el);
-      break;
     }
   }
 }
@@ -298,18 +423,29 @@ interface LineBox extends RectBox {
   spans: HTMLSpanElement[];
 }
 
-/** 收集文本层内的可视行：叶子 span 按垂直重叠聚成行带，行带内按水平大间隙切段（分栏） */
-function collectLines(div: HTMLElement): LineBox[] {
+/**
+ * 收集文本层内的文本行：叶子 span 的 client 矩形先换算到未旋转的层内坐标，
+ * 再按垂直重叠聚成行带，行带内按水平大间隙切段（分栏）。
+ * 必须在局部坐标里分组 —— 旋转页面在屏幕上"行"是竖直的，直接按视觉 y 重叠
+ * 分组会把整页并成一块（表现为三击选中整页）。
+ */
+function collectLines(div: HTMLElement, m: Mapper): LineBox[] {
   interface Item {
-    r: DOMRect;
+    r: RectBox;
     span: HTMLSpanElement;
   }
   const items: Item[] = [];
   div.querySelectorAll("span").forEach((span) => {
     if (span.querySelector("span")) return; // markedContent 等容器，取叶子
     if (!span.textContent) return;
-    const r = span.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1) return;
+    const box = span.getBoundingClientRect();
+    const r = m.toLocal({
+      left: box.left,
+      top: box.top,
+      right: box.right,
+      bottom: box.bottom,
+    });
+    if (r.right - r.left < 1 || r.bottom - r.top < 1) return;
     items.push({ r, span });
   });
   items.sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
@@ -382,8 +518,11 @@ function findLineIndex(lines: LineBox[], x: number, y: number): number {
  * 下一行左端明显缩进（新段开头）即停。
  */
 function selectParagraphAt(div: HTMLElement, e: MouseEvent): boolean {
-  const lines = collectLines(div);
-  const idx = findLineIndex(lines, e.clientX, e.clientY);
+  const m = getMapper(div);
+  if (!m) return false;
+  const pt = m.pointToLocal(e.clientX, e.clientY);
+  const lines = collectLines(div, m);
+  const idx = findLineIndex(lines, pt.x, pt.y);
   if (idx < 0) return false;
   const anchor = lines[idx];
   const h = anchor.bottom - anchor.top;
