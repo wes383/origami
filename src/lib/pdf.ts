@@ -4,6 +4,13 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
+/**
+ * pdf.js 运行时资源目录（由 vite.config.ts 的 pdfjsAssets 插件同步到 public/pdfjs/）。
+ * worker 会按「目录前缀 + 文件名」fetch 这些辅助文件，默认前缀为 null 时会退化成
+ * 相对 worker 脚本的 URL 而 404，导致 CCITT/JPX 扫描图、CJK 非嵌入字体整页空白。
+ */
+const ASSET_BASE = `${import.meta.env.BASE_URL}pdfjs/`;
+
 export type { PDFDocumentProxy };
 
 export interface OpenedPdf {
@@ -58,7 +65,15 @@ export async function openPdf(
   const size = data.byteLength;
   // pdf.js 的 onPassword 挂在 task 上（不在 DocumentInitParameters 里）：
   // 调用 updatePassword(password) 继续，传入 Error 则中止加载
-  const task = pdfjsLib.getDocument({ data });
+  const task = pdfjsLib.getDocument({
+    data,
+    // 四类运行时资源缺失时页面会「渲染成功但一片空白」，必须显式指定
+    cMapUrl: `${ASSET_BASE}cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${ASSET_BASE}standard_fonts/`,
+    wasmUrl: `${ASSET_BASE}wasm/`,
+    iccUrl: `${ASSET_BASE}iccs/`,
+  });
   if (options?.requestPassword) {
     task.onPassword = (
       updatePassword: (value: string | Error) => void,

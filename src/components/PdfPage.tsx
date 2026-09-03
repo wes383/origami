@@ -161,8 +161,12 @@ function PdfPage({
         endOfContent.className = "endOfContent";
         layerEl.append(endOfContent);
         bindTextLayerSelection(layerEl, endOfContent);
-      } catch {
-        /* 渲染取消或失败时静默处理 */
+      } catch (err) {
+        // cancelled 表示翻页/切倍率导致的主动取消，属正常；未取消的失败需要留痕：
+        // 解码器或字体资源缺失时页面会「渲染成功但一片空白」，静默会让人无从排查
+        if (!cancelled) {
+          console.warn(`[PdfPage] 第 ${pageNumber} 页渲染失败`, err);
+        }
       }
     })();
 

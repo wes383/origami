@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# pdf.js 运行时资源，由 vite.config.ts 的 pdfjsAssets 插件从 node_modules 同步生成
+public/pdfjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
