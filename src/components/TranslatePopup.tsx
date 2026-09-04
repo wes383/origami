@@ -118,6 +118,20 @@ function bubblePosition(rect: BubbleInfo["rect"]) {
   return { left, top };
 }
 
+/** 把视口坐标矩形裁剪到视口内（跨页超长选区的联合矩形常远超视口） */
+function clampToViewport(r: {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}): BubbleInfo["rect"] {
+  const x = Math.max(r.left, 0);
+  const y = Math.max(r.top, 0);
+  const w = Math.min(r.right, window.innerWidth) - x;
+  const h = Math.min(r.bottom, window.innerHeight) - y;
+  return { x, y, w, h };
+}
+
 export default function TranslatePopup({
   engine,
   rightPanel,
@@ -173,7 +187,9 @@ export default function TranslatePopup({
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
     const range = selection.getRangeAt(0);
     const text = selection.toString().replace(/\u00a0/g, " ").trim();
-    if (!text || text.length > 3000) return null;
+    // 只挡住病态选区（如 Ctrl+A 全选整本大文档）：正常跨页长选区（几千~几万字，
+    // 正是 AI 总结的目标场景）必须放行，超限由各 AI 动作自行处理
+    if (!text || text.length > 50000) return null;
     const startNode =
       range.startContainer.nodeType === Node.TEXT_NODE
         ? range.startContainer.parentElement
@@ -182,10 +198,26 @@ export default function TranslatePopup({
     if (!layer) return null;
     const rect = range.getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+    // 跨页超长选区：联合矩形可远超视口（顶部为负、底边超出、高度数屏），
+    // 直接定位会把气泡/卡片甩出屏幕或钉在远端。矩形超出视口时改锚到选区
+    // 末行（range 端点所在行 = 松手/起手处，总在收尾时附近）；末行盒无效
+    // （落在 endOfContent 等无内容元素上）则退回裁剪后的联合矩形。
+    let anchor = clampToViewport(rect);
+    if (rect.top < 0 || rect.bottom > window.innerHeight) {
+      const endEl =
+        range.endContainer.nodeType === Node.TEXT_NODE
+          ? range.endContainer.parentElement
+          : (range.endContainer as HTMLElement | null);
+      const endBox = endEl?.getBoundingClientRect();
+      if (endBox && endBox.width > 0 && endBox.height > 0) {
+        const er = clampToViewport(endBox);
+        if (er.w > 0 && er.h > 0 && er.h <= window.innerHeight * 0.5) anchor = er;
+      }
+    }
     return {
       text,
       context: buildContext(layer.textContent ?? "", text),
-      rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+      rect: anchor,
     };
   }, []);
 

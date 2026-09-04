@@ -102,6 +102,8 @@ function PdfPage({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const [rendered, setRendered] = useState(false);
+  /** 已完成渲染的参数指纹（文档+页码+倍率+旋转）。回到视野且指纹未变时跳过重渲染 */
+  const renderedKeyRef = useRef<string | null>(null);
   /**
    * 本页真实尺寸（渲染后回填，替代按首页估算的占位值）。
    * 记录渲染时的 scale/rotation 快照：离屏页（visible=false）不会随倍率变化重渲染，
@@ -117,6 +119,17 @@ function PdfPage({
   const [links, setLinks] = useState<PdfLinkOverlay[]>([]);
 
   useEffect(() => {
+    // 离开懒渲染缓冲区：什么都不清理。文本层 span 是选区/复制的 DOM 载体，
+    // 跨页拖选时页面会因边缘自动滚动离开缓冲区，此刻清 span 会把选区锚点
+    // 端的内容一并从 DOM 摘掉 —— Chromium 随即重算选区，表现为「复制跨页
+    // 选区时丢失起始页文本」。canvas 位图与 span 常驻（官方 viewer 同款），
+    // 仅在倍率/旋转/文档变化时由下方重渲染路径重建。
+    if (!visible) return;
+
+    const key = `${docKey(doc)}|${pageNumber}|${scale}|${rotation}`;
+    // 已按当前参数渲染完成（滚出又滚回视野）：跳过重建，保住活动选区
+    if (renderedKeyRef.current === key) return;
+
     // 倍率/文档变化时先清空旧文本层：其 span 按百分比定位，倍率变了会错位
     const container = textLayerRef.current;
     if (container) {
@@ -124,7 +137,6 @@ function PdfPage({
       container.style.removeProperty("--total-scale-factor");
     }
     setLinks([]);
-    if (!visible) return;
     let cancelled = false;
     let renderTask: { cancel(): void } | null = null;
     let textLayer: TextLayer | null = null;
@@ -203,6 +215,8 @@ function PdfPage({
         endOfContent.className = "endOfContent";
         layerEl.append(endOfContent);
         bindTextLayerSelection(layerEl, endOfContent);
+        // 全部就绪后才记指纹：中途取消不记录，回到视野时仍会完整重渲染
+        renderedKeyRef.current = key;
       } catch (err) {
         // cancelled 表示翻页/切倍率导致的主动取消，属正常；未取消的失败需要留痕：
         // 解码器或字体资源缺失时页面会「渲染成功但一片空白」，静默会让人无从排查
@@ -212,14 +226,24 @@ function PdfPage({
       }
     })();
 
-    const layerDiv = textLayerRef.current;
     return () => {
       cancelled = true;
       renderTask?.cancel();
       textLayer?.cancel();
-      if (layerDiv) unbindTextLayerSelection(layerDiv);
+      // 不在此处 unbind/清层：visible 抖动或渲染取消都会触发 cleanup，
+      // 而文本层可能正承载活动选区（见 effect 顶部注释）。
+      // 解绑只在组件真正卸载时由下方的 unmount effect 完成。
     };
   }, [doc, pageNumber, scale, rotation, visible]);
+
+  // 仅卸载时解绑：把本页从全局选区监听中摘除并清掉选区高亮。
+  // 重新 bind（倍率变化重渲染）时 bindTextLayerSelection 内部会先自行解绑。
+  useEffect(() => {
+    const layerDiv = textLayerRef.current;
+    return () => {
+      if (layerDiv) unbindTextLayerSelection(layerDiv);
+    };
+  }, []);
 
   // 只有真实尺寸与当前倍率匹配时才使用（离屏页可能带着旧倍率的真实尺寸）
   const boxW =
