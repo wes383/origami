@@ -421,7 +421,7 @@ export async function translateSelection(
 export interface SummaryResult {
   /** 提炼后的总结正文（AI 未返回预期 JSON 时为空，改由 raw 承载原文） */
   summary?: string;
-  /** 分点要点（可选，最多 6 条） */
+  /** 分点要点（可选，最多 5 条） */
   keyPoints?: string[];
   /** AI 未返回预期 JSON 时的原文兜底 */
   raw?: string;
@@ -436,13 +436,60 @@ export interface SummarizeParams {
   signal?: AbortSignal;
 }
 
-function summarySystemPrompt(target: string): string {
+/**
+ * 按选区长度分档给总结的硬性输出上限：
+ * 短选区一句话点透即可，长选区允许总结更长、分点更多，
+ * 避免「短选区被啰嗦」与「长选区被压缩失真」两头不讨好。
+ */
+function summaryLengthBudget(text: string): {
+  summaryCap: string;
+  pointsRange: string;
+  pointCap: string;
+} {
+  const t = text.trim();
+  const cjkChars = (t.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
+  const latinWords = t
+    .replace(/[\u3400-\u9fff\uf900-\ufaff]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+  const isLong = cjkChars > 1600 || latinWords > 800;
+  const isMedium = cjkChars > 400 || latinWords > 200;
+  if (isLong) {
+    return {
+      summaryCap:
+        "at most 5 sentences covering the core point and the key supporting ideas (max 120 words for Latin scripts, max 180 characters for CJK)",
+      pointsRange: "4-8",
+      pointCap: "max 30 words / 45 CJK characters each",
+    };
+  }
+  if (isMedium) {
+    return {
+      summaryCap:
+        "at most 3 sentences: the core point plus the most important supporting ideas (max 80 words for Latin scripts, max 120 characters for CJK)",
+      pointsRange: "3-5",
+      pointCap: "max 20 words / 30 CJK characters each",
+    };
+  }
+  return {
+    summaryCap:
+      "exactly ONE sentence stating only the core point (max 40 words for Latin scripts, max 60 characters for CJK)",
+    pointsRange: "2-4",
+    pointCap: "max 20 words / 30 CJK characters each",
+  };
+}
+
+function summarySystemPrompt(target: string, text: string): string {
+  const budget = summaryLengthBudget(text);
   return [
     "You are a precise summarizer for PDF documents.",
-    "The user selected a passage; produce a concise summary that captures the main point, supporting arguments, and any key figures, names or terms.",
-    "Do not add information that is not present in the text, and keep the original order of ideas.",
+    "The user selected a passage from a document. Summarize it for a reader who wants the gist at a glance.",
+    "Brevity is the top priority, but scale the depth to the length of the passage. Hard limits for this request:",
+    `- "summary": ${budget.summaryCap}.`,
+    `- "keyPoints": ${budget.pointsRange} bullet points, each ONE short sentence (${budget.pointCap}), covering only essential facts, figures, names or conclusions.`,
+    "- If nothing matters beyond the core point, omit \"keyPoints\" entirely.",
+    "- Never restate the summary inside keyPoints. No preamble, no closing remarks.",
+    "- Do not add information that is not present in the text, and keep the original order of ideas.",
     `Write the summary in ${target}.`,
-    "If helpful, additionally split the gist into 2-6 short bullet points under \"keyPoints\".",
     "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
     '{"summary": string, "keyPoints": [string, ...]}',
   ].join("\n");
@@ -464,7 +511,7 @@ export async function summarizeSelection(
   const raw = await chatCompletion(
     profile,
     [
-      { role: "system", content: summarySystemPrompt(target) },
+      { role: "system", content: summarySystemPrompt(target, text) },
       { role: "user", content: `Selected text:\n"""\n${text}\n"""${contextBlock}` },
     ],
     signal
@@ -479,7 +526,7 @@ export async function summarizeSelection(
   const keyPoints = Array.isArray(parsed.keyPoints)
     ? (parsed.keyPoints as unknown[])
         .filter((k): k is string => typeof k === "string" && k.trim() !== "")
-        .slice(0, 6)
+        .slice(0, 8)
         .map((k) => k.trim())
     : [];
   if (!summary && keyPoints.length === 0) return { raw: raw.trim() };
