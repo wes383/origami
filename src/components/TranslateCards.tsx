@@ -21,7 +21,11 @@ import {
   type TranslateMode,
 } from "../lib/aiTranslate";
 import { ChevronDownIcon, XIcon } from "./Icons";
-import type { CardState, WikiCardState } from "../hooks/useTextActionEngine";
+import type {
+  CardState,
+  SummaryCardState,
+  WikiCardState,
+} from "../hooks/useTextActionEngine";
 
 const CARD_WIDTH = 380;
 
@@ -38,13 +42,20 @@ function cardPosition(rect: { x: number; y: number; w: number; h: number }) {
     top = below;
     height = Math.min(maxH, window.innerHeight - top - margin);
   } else {
-    // 下方空间不足：卡片放选区上方，底部贴选区上方 10px 展开；
-    // 只有视口高度实在放不下 maxH 时才退回贴顶（top = margin）
     const above = rect.y - 10;
-    top = Math.max(margin, above - maxH);
-    height = Math.min(maxH, above - margin);
+    const availAbove = above - margin;
+    if (availAbove >= 160) {
+      // 下方不足但上方空间足够：卡片占满上方区域、底边贴选区上 10px 展开
+      top = Math.max(margin, above - maxH);
+      height = Math.min(maxH, availAbove);
+    } else {
+      // 上下都放不下整卡（大段跨页选区几乎占满视口，rect.y 贴近视口顶）：
+      // 贴顶部并尽量占满视口可用高度，避免 maxHeight 被兜底成 160px 细条
+      top = margin;
+      height = Math.min(maxH, window.innerHeight - margin * 2);
+    }
   }
-  return { left: x, top, maxHeight: Math.max(160, height) };
+  return { left: x, top, maxHeight: height };
 }
 
 /* ==========================================================================
@@ -241,6 +252,168 @@ export function TranslateCardView({
     >
       <div className="tr-card-header">
         {modeSwitch}
+        <div className="tr-spacer" />
+        {modelMenu}
+        <button
+          type="button"
+          className="tr-close"
+          onClick={onClose}
+          aria-label={t("aiClose")}
+        >
+          <XIcon size={14} />
+        </button>
+      </div>
+      <div className="tr-card-body">{body}</div>
+    </div>
+  );
+}
+
+/* ==========================================================================
+   AI 总结结果卡片（长文本选区；浮动卡或右侧面板 summary tab）
+   ========================================================================== */
+
+export function SummaryCardView({
+  card,
+  variant,
+  onRetry,
+  onClose,
+  onSwitchModel,
+}: {
+  card: SummaryCardState;
+  variant: "floating" | "panel";
+  onRetry: () => void;
+  onClose: () => void;
+  onSwitchModel: (id: string) => void;
+}) {
+  const { t } = useI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // 下拉菜单点击外部关闭
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
+
+  const config = loadAiConfig();
+  const activeProfile = getActiveProfile(config);
+
+  const errorText = (() => {
+    const d = card.errorDetail;
+    if (!d) return "";
+    if (d === "network") return t("aiErrorNetwork");
+    if (d === "empty") return t("aiErrorEmpty");
+    if (d === "no-model") return t("aiErrorNoModel");
+    if (d.startsWith("http:401") || d.startsWith("http:403"))
+      return t("aiErrorAuth");
+    if (d.startsWith("http:404")) return t("aiErrorNotFound");
+    if (d.startsWith("http:429")) return t("aiErrorRateLimit");
+    if (d.startsWith("http:")) return `${t("aiErrorHttp")} ${d.slice(5)}`;
+    return d;
+  })();
+
+  const modelMenu = activeProfile ? (
+    <div className="tr-chip-wrap" ref={menuRef}>
+      <button
+        type="button"
+        className="tr-model-chip"
+        onClick={() => setMenuOpen((v) => !v)}
+        title={t("aiSwitchModel")}
+      >
+        <span>{activeProfile.name}</span>
+        <ChevronDownIcon size={12} />
+      </button>
+      {menuOpen && (
+        <div className="tr-model-menu" role="menu">
+          {config.profiles.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`tr-model-menu-item ${p.id === activeProfile.id ? "is-active" : ""}`}
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onSwitchModel(p.id);
+              }}
+            >
+              <span className="tr-model-dot" aria-hidden="true" />
+              <span className="tr-profile-name">{p.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const body = (
+    <>
+      {card.status === "loading" && (
+        <div className="tr-loading">
+          <span className="spinner" />
+          <span>{t("aiLoading")}</span>
+        </div>
+      )}
+
+      {card.status === "error" && (
+        <div className="tr-error">
+          <p>{errorText || t("aiErrorRequest")}</p>
+          <button type="button" className="tr-retry" onClick={onRetry}>
+            {t("aiRetry")}
+          </button>
+        </div>
+      )}
+
+      {card.status === "done" && card.result && (
+        <>
+          {card.result.summary ? (
+            <>
+              <p className="tr-summary-text">{card.result.summary}</p>
+              {card.result.keyPoints && card.result.keyPoints.length > 0 && (
+                <ul className="tr-summary-keys">
+                  {card.result.keyPoints.map((k, i) => (
+                    <li key={i}>{k}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <p className="tr-raw">{card.result.raw}</p>
+          )}
+        </>
+      )}
+    </>
+  );
+
+  if (variant === "panel") {
+    return (
+      <div
+        className="tr-panel-content"
+        role="region"
+        aria-label={t("aiSummarize")}
+      >
+        <div className="tr-panel-header">
+          <span className="tr-summary-tag">{t("aiSummarize")}</span>
+          <div className="tr-spacer" />
+          {modelMenu}
+        </div>
+        <div className="tr-panel-body">{body}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="tr-card tr-card-summary"
+      style={cardPosition(card.info.rect)}
+      role="dialog"
+      aria-label={t("aiSummarize")}
+    >
+      <div className="tr-card-header">
+        <span className="tr-summary-tag">{t("aiSummarize")}</span>
         <div className="tr-spacer" />
         {modelMenu}
         <button

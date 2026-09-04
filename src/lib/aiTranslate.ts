@@ -7,7 +7,9 @@
  * webview 内可直接请求外部 HTTPS 接口。
  */
 
-const STORAGE_KEY = "pdfreader-ai-config";
+import { readJson, readText, storageKey, writeJson, writeText } from "./storage";
+
+const STORAGE_KEY = storageKey("ai-config");
 
 /** 一个模型档案 = 一个厂商端点 + 模型 */
 export interface AiProfile {
@@ -57,64 +59,55 @@ function sanitizeProfiles(raw: unknown): AiProfile[] {
 }
 
 export function loadAiConfig(): AiConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { profiles: [], activeId: "" };
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const parsed = readJson<Record<string, unknown> | null>(STORAGE_KEY, null);
+  if (!parsed) return { profiles: [], activeId: "" };
 
-    let profiles: AiProfile[] = [];
-    if (Array.isArray(parsed.profiles)) {
-      // 当前格式：档案列表
-      profiles = sanitizeProfiles(parsed.profiles);
-    } else if (Array.isArray(parsed.models)) {
-      // 上一版：单 endpoint + 多模型名 → 每个模型名升格为一个档案
-      const baseUrl = typeof parsed.baseUrl === "string" ? parsed.baseUrl : "";
-      const apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey : "";
-      const activeModel =
-        typeof parsed.activeModel === "string" ? parsed.activeModel : "";
-      profiles = (parsed.models as unknown[])
-        .filter((m): m is string => typeof m === "string" && m.trim() !== "")
-        .map((m) => ({
-          id: genId(),
-          name: m.trim(),
-          baseUrl,
-          apiKey,
-          model: m.trim(),
-        }));
-      const hit = profiles.find((p) => p.model === activeModel);
-      return {
-        profiles,
-        activeId: hit?.id ?? profiles[0]?.id ?? "",
-      };
-    } else if (typeof parsed.model === "string" && parsed.model.trim()) {
-      // 最初版：单 endpoint + 单模型
-      profiles = [
-        {
-          id: genId(),
-          name: parsed.model.trim(),
-          baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
-          apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
-          model: parsed.model.trim(),
-        },
-      ];
-    }
-
-    let activeId = typeof parsed.activeId === "string" ? parsed.activeId : "";
-    if (!profiles.some((p) => p.id === activeId)) {
-      activeId = profiles[0]?.id ?? "";
-    }
-    return { profiles, activeId };
-  } catch {
-    return { profiles: [], activeId: "" };
+  let profiles: AiProfile[] = [];
+  if (Array.isArray(parsed.profiles)) {
+    // 当前格式：档案列表
+    profiles = sanitizeProfiles(parsed.profiles);
+  } else if (Array.isArray(parsed.models)) {
+    // 上一版：单 endpoint + 多模型名 → 每个模型名升格为一个档案
+    const baseUrl = typeof parsed.baseUrl === "string" ? parsed.baseUrl : "";
+    const apiKey = typeof parsed.apiKey === "string" ? parsed.apiKey : "";
+    const activeModel =
+      typeof parsed.activeModel === "string" ? parsed.activeModel : "";
+    profiles = (parsed.models as unknown[])
+      .filter((m): m is string => typeof m === "string" && m.trim() !== "")
+      .map((m) => ({
+        id: genId(),
+        name: m.trim(),
+        baseUrl,
+        apiKey,
+        model: m.trim(),
+      }));
+    const hit = profiles.find((p) => p.model === activeModel);
+    return {
+      profiles,
+      activeId: hit?.id ?? profiles[0]?.id ?? "",
+    };
+  } else if (typeof parsed.model === "string" && parsed.model.trim()) {
+    // 最初版：单 endpoint + 单模型
+    profiles = [
+      {
+        id: genId(),
+        name: parsed.model.trim(),
+        baseUrl: typeof parsed.baseUrl === "string" ? parsed.baseUrl : "",
+        apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+        model: parsed.model.trim(),
+      },
+    ];
   }
+
+  let activeId = typeof parsed.activeId === "string" ? parsed.activeId : "";
+  if (!profiles.some((p) => p.id === activeId)) {
+    activeId = profiles[0]?.id ?? "";
+  }
+  return { profiles, activeId };
 }
 
 export function saveAiConfig(config: AiConfig): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  } catch {
-    /* ignore */
-  }
+  writeJson(STORAGE_KEY, config);
 }
 
 export function getActiveProfile(config: AiConfig): AiProfile | null {
@@ -213,29 +206,21 @@ export const TARGET_LANGS = [
 
 export type TargetLangId = (typeof TARGET_LANGS)[number]["id"];
 
-const TARGET_KEY = "pdfreader-target-lang";
+const TARGET_KEY = storageKey("target-lang");
 
 /** 特殊值：跟随界面语言（默认）。由调用方解析为当前 UI 语言 */
 export const TARGET_AUTO = "auto";
 
 /** 读取目标语言，默认「跟随界面语言」（与界面语言保持一致） */
 export function loadTargetLang(): string {
-  try {
-    const v = localStorage.getItem(TARGET_KEY);
-    if (v === TARGET_AUTO) return TARGET_AUTO;
-    if (v && TARGET_LANGS.some((l) => l.id === v)) return v;
-  } catch {
-    /* ignore */
-  }
+  const v = readText(TARGET_KEY);
+  if (v === TARGET_AUTO) return TARGET_AUTO;
+  if (v && TARGET_LANGS.some((l) => l.id === v)) return v;
   return TARGET_AUTO;
 }
 
 export function saveTargetLang(id: string): void {
-  try {
-    localStorage.setItem(TARGET_KEY, id);
-  } catch {
-    /* ignore */
-  }
+  writeText(TARGET_KEY, id);
 }
 
 export function targetLangName(id: string): string {
@@ -429,6 +414,76 @@ export async function translateSelection(
     contextMeaning: pickString(parsed, "contextMeaning"),
     senses,
   };
+}
+
+// ---------- 长文本 AI 总结 ----------
+
+export interface SummaryResult {
+  /** 提炼后的总结正文（AI 未返回预期 JSON 时为空，改由 raw 承载原文） */
+  summary?: string;
+  /** 分点要点（可选，最多 6 条） */
+  keyPoints?: string[];
+  /** AI 未返回预期 JSON 时的原文兜底 */
+  raw?: string;
+}
+
+export interface SummarizeParams {
+  config: AiConfig;
+  text: string;
+  context: string;
+  /** 目标语言 id（见 TARGET_LANGS），总结用该语言输出 */
+  lang: string;
+  signal?: AbortSignal;
+}
+
+function summarySystemPrompt(target: string): string {
+  return [
+    "You are a precise summarizer for PDF documents.",
+    "The user selected a passage; produce a concise summary that captures the main point, supporting arguments, and any key figures, names or terms.",
+    "Do not add information that is not present in the text, and keep the original order of ideas.",
+    `Write the summary in ${target}.`,
+    "If helpful, additionally split the gist into 2-6 short bullet points under \"keyPoints\".",
+    "Respond ONLY with a JSON object, no markdown fences, in this exact shape:",
+    '{"summary": string, "keyPoints": [string, ...]}',
+  ].join("\n");
+}
+
+/** 主入口：总结选中的长文本（输出语言跟随目标语言设置） */
+export async function summarizeSelection(
+  params: SummarizeParams
+): Promise<SummaryResult> {
+  const { config, text, context, lang, signal } = params;
+  const target = targetLangName(lang);
+  const contextBlock = context
+    ? `\n\nContext (page text where the selection appears):\n"""\n${context}\n"""`
+    : "";
+
+  const profile = getActiveProfile(config);
+  if (!profile) throw new AiRequestError("no-model");
+
+  const raw = await chatCompletion(
+    profile,
+    [
+      { role: "system", content: summarySystemPrompt(target) },
+      { role: "user", content: `Selected text:\n"""\n${text}\n"""${contextBlock}` },
+    ],
+    signal
+  );
+
+  const parsed = extractJson(raw);
+  if (!parsed) return { raw: raw.trim() };
+  const summary =
+    pickString(parsed, "summary") ??
+    pickString(parsed, "translation") ??
+    pickString(parsed, "text");
+  const keyPoints = Array.isArray(parsed.keyPoints)
+    ? (parsed.keyPoints as unknown[])
+        .filter((k): k is string => typeof k === "string" && k.trim() !== "")
+        .slice(0, 6)
+        .map((k) => k.trim())
+    : [];
+  if (!summary && keyPoints.length === 0) return { raw: raw.trim() };
+  return { summary, keyPoints: keyPoints.length > 0 ? keyPoints : undefined };
 }
 
 /** 设置弹窗「测试连接」：发送一条最小请求验证配置可用 */

@@ -16,6 +16,7 @@ import { es } from "./es";
 import { ru } from "./ru";
 import { pt } from "./pt";
 import { it } from "./it";
+import { readText, storageKey, writeText } from "../lib/storage";
 
 export type { LangKeys };
 
@@ -57,7 +58,7 @@ const dicts: Record<Lang, Record<LangKeys, string>> = {
   pt,
   it,
 };
-const STORAGE_KEY = "pdfreader-lang";
+const STORAGE_KEY = storageKey("lang");
 
 /** 浏览器语言主前缀 → 界面语言（未识别回退 en） */
 const BROWSER_LANG_MAP: Record<string, Lang> = {
@@ -88,12 +89,8 @@ const HTML_LANG: Record<Lang, string> = {
 };
 
 function detectLang(): Lang {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && UI_LANGS.some((l) => l.id === saved)) return saved as Lang;
-  } catch {
-    /* ignore */
-  }
+  const saved = readText(STORAGE_KEY);
+  if (saved && UI_LANGS.some((l) => l.id === saved)) return saved as Lang;
   const base = navigator.language.toLowerCase().split("-")[0];
   return BROWSER_LANG_MAP[base] ?? "en";
 }
@@ -110,11 +107,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(detectLang);
 
   const setLang = useCallback((next: Lang) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
+    writeText(STORAGE_KEY, next);
     setLangState(next);
   }, []);
 

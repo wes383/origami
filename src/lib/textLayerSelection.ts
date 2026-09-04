@@ -27,6 +27,8 @@
  *    Selection。
  */
 
+import type { AnnoRect } from "./annotations";
+
 interface LayerEntry {
   end: HTMLElement;
   onMouseDown: (e: MouseEvent) => void;
@@ -73,6 +75,11 @@ function reset(end: HTMLElement, textLayer: HTMLElement): void {
   textLayer.append(end);
   end.style.width = "";
   end.style.height = "";
+  // userSelect 必须一起清掉：selectionchange 会把锚点层的 endOfContent 临时置为
+  // user-select:text（让"往空白拖"最多延伸到它为止）。若不清理，下一次拖选时
+  // 该元素仍是可选中的、且因 .selecting 铺满整层 —— 拖到这一页的空白区就会直接
+  // 选到该元素的 DOM 位置（层末尾），表现为「整页被选中」。
+  end.style.userSelect = "";
   textLayer.classList.remove("selecting");
 }
 
@@ -358,42 +365,81 @@ function mergeSelectionRects(rects: RectBox[]): RectBox[] {
   return merged;
 }
 
+/**
+ * 收集选区落在某个文本层内的「文字矩形」（client 坐标）。
+ *
+ * 不能直接用 range.getClientRects()：跨页选区（起点在上一页、终点在下一页）时，
+ * 它除了每行文字的小矩形，还会额外返回被选区整块包住的**元素盒** —— 下一页的
+ * 文本层 div、铺满整层的 endOfContent 等，尺寸就是整页（如 612×330）。这些
+ * 大方框会被当成"一行文字"与真实行矩形合并，最终把整页涂成一整块蓝（用户
+ * 感知为"跨页选择时直接选中整个页面"）。
+ *
+ * 逐文本节点取矩形可以彻底避开元素盒：对每个落在选区内的 Text 节点单独建
+ * 子 Range（端点按选区边界裁剪），它的 getClientRects() 只会有文字自己的行盒。
+ */
+function collectTextRects(div: HTMLElement, selection: Selection): RectBox[] {
+  const out: RectBox[] = [];
+  for (let i = 0; i < selection.rangeCount; i++) {
+    const range = selection.getRangeAt(i);
+    // 选区与本页面无关的层：整层跳过（懒渲染文档里绝大多数页走这条分支）
+    if (!range.intersectsNode(div)) continue;
+    const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return node.nodeValue && range.intersectsNode(node)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP;
+      },
+    });
+    let node = walker.nextNode();
+    while (node) {
+      const r = document.createRange();
+      r.selectNodeContents(node);
+      // 选区起点落在本节点内 → 用选区的起点；终点同理
+      if (range.compareBoundaryPoints(Range.START_TO_START, r) > 0) {
+        r.setStart(range.startContainer, range.startOffset);
+      }
+      if (range.compareBoundaryPoints(Range.END_TO_END, r) < 0) {
+        r.setEnd(range.endContainer, range.endOffset);
+      }
+      for (const rect of r.getClientRects()) {
+        if (rect.width < 1 || rect.height < 1) continue;
+        out.push({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        });
+      }
+      node = walker.nextNode();
+    }
+  }
+  return out;
+}
+
 function paintSelection(): void {
   // 每页先清空，再按页收集 → 局部合并 → 换回视觉坐标绘制。
   // 按页分别合并：跨页选区不会被并成一块，旋转页也能按层内行正确分行。
-  const layers: { m: Mapper; paint: HTMLElement | null }[] = [];
+  const layers: { div: HTMLElement; paint: HTMLElement | null }[] = [];
   for (const div of textLayers.keys()) {
     const paint =
       div.parentElement?.querySelector<HTMLElement>(".pdf-sel-layer") ?? null;
     paint?.replaceChildren();
-    const m = getMapper(div);
-    if (m) layers.push({ m, paint });
+    layers.push({ div, paint });
   }
   const selection = document.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 
-  const rects: RectBox[] = [];
-  for (let i = 0; i < selection.rangeCount; i++) {
-    for (const r of selection.getRangeAt(i).getClientRects()) {
-      if (r.width < 1 || r.height < 1) continue;
-      rects.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
-    }
-  }
-  if (!rects.length) return;
-
-  for (const { m, paint } of layers) {
+  for (const { div, paint } of layers) {
     if (!paint) continue;
+    const rects = collectTextRects(div, selection);
+    if (!rects.length) continue;
+    const m = getMapper(div);
+    if (!m) continue;
     const vb = m.visual;
     const vw = vb.right - vb.left;
     const vh = vb.bottom - vb.top;
     const local: RectBox[] = [];
-    for (const r of rects) {
-      const cx = (r.left + r.right) / 2;
-      const cy = (r.top + r.bottom) / 2;
-      if (cx < vb.left || cx > vb.right || cy < vb.top || cy > vb.bottom) continue;
-      local.push(m.toLocal(r));
-    }
-    if (!local.length) continue;
+    for (const r of rects) local.push(m.toLocal(r));
     for (const line of mergeSelectionRects(local)) {
       const v = m.toVisual(line);
       // 裁剪到视觉盒内（防 endOfContent 等越界矩形）
@@ -572,4 +618,78 @@ function selectParagraphAt(div: HTMLElement, e: MouseEvent): boolean {
   selection.removeAllRanges();
   selection.addRange(range);
   return true;
+}
+
+/* ==========================================================================
+   注释捕获：把当前文本选区转成按行合并、归一化的矩形（注释系统使用）
+   ========================================================================== */
+
+export interface CaptureSelection {
+  /** 页码（1-based，取自锚点所在 .pdf-page） */
+  page: number;
+  /** 选区文本（空白压缩后） */
+  text: string;
+  /** 按视觉行合并后的归一化矩形（未旋转页面坐标 0~1） */
+  rects: AnnoRect[];
+}
+
+/**
+ * 捕获 document 当前选区在锚点文本层上的几何：
+ * 选区 client 矩形 → 文本层局部坐标（未旋转内容空间）→ 按视觉行合并 → 归一化。
+ * 结果与全文查找 SearchRect 同空间，可直接入库并在 PdfPage 按 rotateRect 渲染。
+ * 跨页选区只取锚点层所在页（逐文本节点收集，天然只落在本层内）。
+ */
+export function captureSelectionRects(): CaptureSelection | null {
+  const selection = document.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  const text = selection
+    .toString()
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+  const startNode =
+    range.startContainer.nodeType === Node.TEXT_NODE
+      ? range.startContainer.parentElement
+      : (range.startContainer as HTMLElement | null);
+  const layer = startNode?.closest?.(".pdf-text-layer") as HTMLElement | null;
+  if (!layer || !textLayers.has(layer)) return null;
+  const mapper = getMapper(layer);
+  if (!mapper) return null;
+  const pageEl = layer.closest<HTMLElement>(".pdf-page");
+  const page = Number(pageEl?.dataset.page ?? 0);
+  if (!page || !Number.isFinite(page)) return null;
+
+  // 只取本层的文字矩形（逐文本节点取，避免跨页选区把下一页的整页元素盒算进来），
+  // 再换算到层内局部坐标
+  const local: RectBox[] = [];
+  for (const r of collectTextRects(layer, selection)) local.push(mapper.toLocal(r));
+  if (!local.length) return null;
+  const lw = layer.offsetWidth;
+  const lh = layer.offsetHeight;
+  if (lw < 1 || lh < 1) return null;
+
+  const merged = mergeSelectionRects(local);
+  // 垂直去重叠：相邻行矩形如有垂直重叠（line-height 把 descender/ascender
+  // 算进 box，相邻行 client rect 在垂直方向常有 2-4px 重叠），把上方底部裁到
+  // 下方顶部紧接。注释层每行独立绘制半透明背景，重叠区叠色变深（截图里行交界
+  // 加深就是这个原因）；裁掉重叠后颜色均匀，但行间不会留缝。
+  merged.sort((a, b) => a.top - b.top);
+  for (let i = 1; i < merged.length; i++) {
+    if (merged[i].top < merged[i - 1].bottom) {
+      merged[i - 1].bottom = merged[i].top;
+    }
+  }
+  const rects: AnnoRect[] = [];
+  for (const line of merged) {
+    const x = Math.max(0, Math.min(1, line.left / lw));
+    const y = Math.max(0, Math.min(1, line.top / lh));
+    const w = Math.max(0, Math.min(1 - x, (line.right - line.left) / lw));
+    const h = Math.max(0, Math.min(1 - y, (line.bottom - line.top) / lh));
+    if (w < 0.0005 || h < 0.0005) continue;
+    rects.push({ x, y, w, h });
+  }
+  if (!rects.length) return null;
+  return { page, text, rects };
 }

@@ -2,10 +2,35 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { docKey, type OutlineNode } from "../lib/pdf";
 import { renderCacheGet, renderCacheSet, thumbCacheKey } from "../lib/renderCache";
+import type { Bookmark } from "../lib/bookmarks";
+import {
+  ANNO_DEFAULT_COLOR,
+  annoIconTone,
+  annoInk,
+  type Annotation,
+  type AnnotationType,
+} from "../lib/annotations";
 import { useI18n } from "../i18n";
-import { ChevronDownIcon, ChevronRightIcon, SearchIcon, XIcon } from "./Icons";
+import {
+  AnnotateIcon,
+  BookmarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  GridIcon,
+  HighlighterIcon,
+  ListIcon,
+  PencilIcon,
+  PlusIcon,
+  SearchIcon,
+  StackIcon,
+  StickyNoteIcon,
+  StrikethroughIcon,
+  TrashIcon,
+  UnderlineIcon,
+  XIcon,
+} from "./Icons";
 
-export type SidebarTab = "outline" | "thumbnails";
+export type SidebarTab = "outline" | "thumbnails" | "bookmarks" | "annotations";
 
 /** 缩略图渲染宽度（CSS px），面板内单列 */
 const THUMB_WIDTH = 152;
@@ -19,6 +44,18 @@ interface SidebarProps {
   currentPage: number;
   /** 点击条目/缩略图跳转到目标页 */
   onNavigate: (page: number) => void;
+  /** 当前文档的书签列表（按页码升序） */
+  bookmarks: Bookmark[];
+  /** 添加当前页为书签 */
+  onAddBookmark: () => void;
+  /** 移除第 index 条书签（索引对应 bookmarks 数组顺序） */
+  onRemoveBookmark: (index: number) => void;
+  /** 重命名第 index 条书签（label 传空串表示恢复默认标题） */
+  onRenameBookmark: (index: number, label: string) => void;
+  /** 当前文档的全部注释（跨类型、按创建序存储） */
+  annotations: Annotation[];
+  /** 删除指定 id 的注释（列表条目内的删除按钮） */
+  onDeleteAnnotation: (id: string) => void;
   onClose: () => void;
 }
 
@@ -30,14 +67,58 @@ export default function Sidebar({
   onTabChange,
   currentPage,
   onNavigate,
+  bookmarks,
+  onAddBookmark,
+  onRemoveBookmark,
+  onRenameBookmark,
+  annotations,
+  onDeleteAnnotation,
   onClose,
 }: SidebarProps) {
   const { t } = useI18n();
   const hasOutline = outline.length > 0;
-  const activeTab: SidebarTab = tab === "outline" && hasOutline ? "outline" : "thumbnails";
+  // 无目录时回退到缩略图；书签页始终可用
+  const activeTab: SidebarTab =
+    tab === "outline" && !hasOutline ? "thumbnails" : tab;
+
+  /** 「编辑列表」开关：书签 / 注释 tab 头部（关闭钮左侧）的笔按钮触发，
+      开启后两个列表的条目右侧才出现删除钮 */
+  const [listEditing, setListEditing] = useState(false);
+  const canEditList =
+    activeTab === "bookmarks" || activeTab === "annotations";
+
+  /** 切换 tab 时退出列表编辑态（编辑按钮只在这两个 tab 下存在） */
+  const changeTab = (next: SidebarTab) => {
+    setListEditing(false);
+    onTabChange(next);
+  };
+
+  /** 编辑态下点击除「条目删除钮 / 编辑开关」以外的任意位置立即退出编辑态：
+      在面板上统一收口冒泡事件（条目自身跳页 / 行内改名等 handler 先行执行，
+      删除钮点击不退出以支持连续删除） */
+  const onPanelClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (!listEditing) return;
+    if ((e.target as HTMLElement).closest(".bm-del, .anl-del, .sidebar-edit"))
+      return;
+    setListEditing(false);
+  };
+
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  // 编辑态下点击侧栏「外部」任意位置同样退出编辑态（内部点击交由 onPanelClick 统一处理，
+  // 删除钮 / 编辑开关的豁免逻辑不受影响）
+  useEffect(() => {
+    if (!listEditing) return;
+    const onDocPointerDown = (e: PointerEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setListEditing(false);
+    };
+    document.addEventListener("pointerdown", onDocPointerDown);
+    return () => document.removeEventListener("pointerdown", onDocPointerDown);
+  }, [listEditing]);
 
   return (
-    <aside className="sidebar-panel">
+    <aside className="sidebar-panel" ref={panelRef} onClick={onPanelClick}>
       <div className="sidebar-head">
         <div className="sidebar-tabs" role="tablist">
           {hasOutline && (
@@ -45,34 +126,92 @@ export default function Sidebar({
               type="button"
               role="tab"
               aria-selected={activeTab === "outline"}
+              aria-label={t("toc")}
+              title={t("toc")}
               className={`sidebar-tab ${activeTab === "outline" ? "is-active" : ""}`}
-              onClick={() => onTabChange("outline")}
+              onClick={() => changeTab("outline")}
             >
-              {t("toc")}
+              <ListIcon size={15} />
             </button>
           )}
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "thumbnails"}
+            aria-label={t("thumbnails")}
+            title={t("thumbnails")}
             className={`sidebar-tab ${activeTab === "thumbnails" ? "is-active" : ""}`}
-            onClick={() => onTabChange("thumbnails")}
+            onClick={() => changeTab("thumbnails")}
           >
-            {t("thumbnails")}
+            <GridIcon size={15} />
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "bookmarks"}
+            aria-label={t("bookmarks")}
+            title={t("bookmarks")}
+            className={`sidebar-tab ${activeTab === "bookmarks" ? "is-active" : ""}`}
+            onClick={() => changeTab("bookmarks")}
+          >
+            <BookmarkIcon size={15} />
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "annotations"}
+            aria-label={t("annotateTools")}
+            title={t("annotateTools")}
+            className={`sidebar-tab ${activeTab === "annotations" ? "is-active" : ""}`}
+            onClick={() => changeTab("annotations")}
+          >
+            <AnnotateIcon size={15} />
           </button>
         </div>
-        <button
-          type="button"
-          className="sidebar-close"
-          onClick={onClose}
-          title={t("tocClose")}
-          aria-label={t("tocClose")}
-        >
-          <XIcon size={15} />
-        </button>
+        <div className="sidebar-actions">
+          {canEditList && (
+            <button
+              type="button"
+              className={`sidebar-edit ${listEditing ? "is-active" : ""}`}
+              onClick={() => setListEditing((v) => !v)}
+              title={listEditing ? t("listEditDone") : t("listEdit")}
+              aria-label={listEditing ? t("listEditDone") : t("listEdit")}
+              aria-pressed={listEditing}
+            >
+              <PencilIcon size={14} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="sidebar-close"
+            onClick={onClose}
+            title={t("tocClose")}
+            aria-label={t("tocClose")}
+          >
+            <XIcon size={15} />
+          </button>
+        </div>
       </div>
       {activeTab === "outline" ? (
         <OutlineTree outline={outline} currentPage={currentPage} onNavigate={onNavigate} />
+      ) : activeTab === "bookmarks" ? (
+        <BookmarkList
+          bookmarks={bookmarks}
+          currentPage={currentPage}
+          onNavigate={onNavigate}
+          onAddCurrent={onAddBookmark}
+          onRemove={onRemoveBookmark}
+          onRename={onRenameBookmark}
+          listEdit={listEditing}
+        />
+      ) : activeTab === "annotations" ? (
+        <AnnotationList
+          annotations={annotations}
+          currentPage={currentPage}
+          onNavigate={onNavigate}
+          onDelete={onDeleteAnnotation}
+          listEdit={listEditing}
+        />
       ) : (
         <ThumbnailList
           doc={doc}
@@ -517,5 +656,339 @@ function Thumb({
       </span>
       <span className="thumb-page">{pageNumber}</span>
     </button>
+  );
+}
+
+/* ==========================================================================
+   用户书签（复用缩略图列表的视觉语言：同一容器与卡片质感）
+   ========================================================================== */
+
+function BookmarkList({
+  bookmarks,
+  currentPage,
+  onNavigate,
+  onAddCurrent,
+  onRemove,
+  onRename,
+  listEdit,
+}: {
+  bookmarks: Bookmark[];
+  currentPage: number;
+  onNavigate: (page: number) => void;
+  onAddCurrent: () => void;
+  onRemove: (index: number) => void;
+  onRename: (index: number, label: string) => void;
+  /** 编辑态：为真时条目右侧显示删除钮 */
+  listEdit: boolean;
+}) {
+  const { t } = useI18n();
+  /** 当前页是否已加书签（是则隐藏底部"添加当前页"按钮） */
+  const currentBookmarked = bookmarks.some((b) => b.page === currentPage);
+  /** 正在行内改名的条目索引（null = 无） */
+  const [editing, setEditing] = useState<number | null>(null);
+  /** 输入框草稿（初始为原 label；未自定义时为占位提示默认标题） */
+  const [draft, setDraft] = useState("");
+  /** 显式取消/提交后置真，屏蔽随后的 blur 误提交（参照自动阅读输入框惯例） */
+  const cancelledRef = useRef(false);
+
+  /** 条目标题：自定义 label 优先；未命名时默认「第 x 页」（本地化） */
+  const titleOf = (b: Bookmark) =>
+    b.label || t("bookmarkDefaultLabel").replace("{n}", String(b.page));
+
+  const beginEdit = (index: number) => {
+    cancelledRef.current = false;
+    setEditing(index);
+    setDraft(bookmarks[index]?.label ?? "");
+  };
+
+  /** 提交：Trim 后存 label（空串 = 恢复默认标题） */
+  const finishEdit = () => {
+    if (editing == null) return;
+    const index = editing;
+    cancelledRef.current = true; // 屏蔽提交后输入框卸载触发的 blur
+    setEditing(null);
+    onRename(index, draft.trim());
+  };
+
+  /** Esc 取消：不改动 label */
+  const cancelEdit = () => {
+    cancelledRef.current = true;
+    setEditing(null);
+  };
+
+  /** 失焦：仅当未显式取消/提交过才提交 */
+  const handleBlur = () => {
+    if (editing == null) return;
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      return;
+    }
+    finishEdit();
+  };
+
+  return (
+    <div className="thumb-list">
+      {bookmarks.length === 0 ? (
+        <div className="bookmark-empty">{t("bookmarkEmpty")}</div>
+      ) : (
+        bookmarks.map((b, i) => {
+          const isEditing = editing === i;
+          return (
+            <div
+              key={b.page}
+              className={`bm-item ${b.page === currentPage ? "is-active" : ""} ${
+                isEditing ? "is-editing" : ""
+              }`}
+              onClick={(e) => {
+                // 编辑中：点击空白仅让输入框失焦（提交/取消），不跳页
+                if (isEditing) return;
+                // 点击内部按钮（跳转/改名/删除）时交还自身处理
+                if ((e.target as HTMLElement).closest("button")) return;
+                onNavigate(b.page);
+              }}
+            >
+              {isEditing ? (
+                <div className="bm-main">
+                  <span className="bm-page">{b.page}</span>
+                  <input
+                    className="bm-edit"
+                    type="text"
+                    value={draft}
+                    placeholder={b.label ? undefined : titleOf(b)}
+                    autoFocus
+                    onChange={(e) => setDraft(e.target.value)}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") finishEdit();
+                      else if (e.key === "Escape") cancelEdit();
+                    }}
+                    onBlur={handleBlur}
+                    aria-label={t("bookmarkRename")}
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="bm-main"
+                  onClick={() => onNavigate(b.page)}
+                  title={b.label ? `${b.label} · ${b.page}` : String(b.page)}
+                >
+                  <span className="bm-page">{b.page}</span>
+                  {/* 无独立编辑钮：第一击跳页（该条成为当前页）后，
+                      再次点击标题文字进入行内改名；尚未在当前页时点标题仍是跳页 */}
+                  <span
+                    className={`bm-label ${b.label ? "" : "bm-label-empty"}`}
+                    title={b.page === currentPage ? t("bookmarkRename") : undefined}
+                    onClick={(e) => {
+                      if (b.page !== currentPage) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      beginEdit(i);
+                    }}
+                  >
+                    {titleOf(b)}
+                  </span>
+                </button>
+              )}
+              {listEdit && (
+                <button
+                  type="button"
+                  className="bm-del"
+                  onClick={() => onRemove(i)}
+                  tabIndex={isEditing ? -1 : 0}
+                  title={t("removeBookmark")}
+                  aria-label={t("removeBookmark")}
+                >
+                  <TrashIcon size={13} />
+                </button>
+              )}
+            </div>
+          );
+        })
+      )}
+      {!currentBookmarked && (
+        <button type="button" className="bm-add" onClick={onAddCurrent}>
+          <PlusIcon size={14} />
+          <span>{t("bookmarkAddCurrent")}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ==========================================================================
+   注释列表（高亮 / 下划线 / 删除线 / 文字批注 汇总，按页码升序）
+   ========================================================================== */
+
+/** 类型过滤 chips 顺序：null = 全部 → 四类注释 */
+const ANNO_TYPE_FILTERS: (AnnotationType | null)[] = [
+  null,
+  "highlight",
+  "underline",
+  "strikeout",
+  "note",
+];
+
+function AnnotationList({
+  annotations,
+  currentPage,
+  onNavigate,
+  onDelete,
+  listEdit,
+}: {
+  annotations: Annotation[];
+  currentPage: number;
+  onNavigate: (page: number) => void;
+  onDelete: (id: string) => void;
+  /** 编辑态：为真时条目右侧显示删除钮 */
+  listEdit: boolean;
+}) {
+  const { t } = useI18n();
+
+  /** 按页码升序（同页按创建先后），列表始终稳定有序 */
+  const sorted = useMemo(
+    () =>
+      [...annotations].sort((a, b) => a.page - b.page || a.at - b.at),
+    [annotations]
+  );
+
+  /** 类型过滤：null = 全部类型 */
+  const [filter, setFilter] = useState<AnnotationType | null>(null);
+
+  /** 过滤后的展示列表 */
+  const filtered = useMemo(
+    () => (filter ? sorted.filter((a) => a.type === filter) : sorted),
+    [sorted, filter]
+  );
+
+  const typeName = (type: AnnotationType): string => {
+    switch (type) {
+      case "highlight":
+        return t("annotateHighlight");
+      case "underline":
+        return t("annotateUnderline");
+      case "strikeout":
+        return t("annotateStrikeout");
+      case "note":
+        return t("annotateNote");
+    }
+  };
+
+  /** 条目主文案：文字批注优先显示正文（用户写的内容），几何注释显示选中摘录 */
+  const labelOf = (a: Annotation): string => {
+    const raw =
+      a.type === "note" && a.note.trim()
+        ? a.note
+        : a.text || typeName(a.type);
+    return raw.replace(/\s+/g, " ").trim() || typeName(a.type);
+  };
+
+  const typeIcon = (type: AnnotationType, size = 12) => {
+    switch (type) {
+      case "highlight":
+        return <HighlighterIcon size={size} />;
+      case "underline":
+        return <UnderlineIcon size={size} />;
+      case "strikeout":
+        return <StrikethroughIcon size={size} />;
+      case "note":
+        return <StickyNoteIcon size={size} />;
+    }
+  };
+
+  return (
+    <div className="anl-panel">
+      {sorted.length > 0 && (
+        <div className="anl-filters" role="group" aria-label={t("annotateTools")}>
+          {/* 过滤 chips：全部 + 四类型（null=全部）。纯图标钮，类型图标按类型默认落笔色
+              着色（is-active 背景 accent-muted），文字移至 title / aria-label */}
+          {ANNO_TYPE_FILTERS.map((ft) => {
+            const active = filter === ft;
+            const chipTitle = ft === null ? t("annotateAll") : typeName(ft);
+            const chipColor =
+              ft === "note"
+                ? "#b45309"
+                : ft
+                  ? annoInk(ANNO_DEFAULT_COLOR[ft])
+                  : undefined;
+            return (
+              <button
+                key={ft ?? "all"}
+                type="button"
+                className={`anl-chip${active ? " is-active" : ""}`}
+                title={chipTitle}
+                aria-label={chipTitle}
+                aria-pressed={active}
+                onClick={() => setFilter(ft)}
+              >
+                {ft === null ? (
+                  <StackIcon size={14} />
+                ) : (
+                  <span
+                    className="anl-chip-ic"
+                    style={{ color: chipColor }}
+                    aria-hidden="true"
+                  >
+                    {typeIcon(ft, 14)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="thumb-list">
+        {filtered.length === 0 ? (
+          <div className="anl-empty">{t("annotationListEmpty")}</div>
+        ) : (
+          filtered.map((a) => {
+            // 几何类图标 chip 跟随该条实际落笔色（旧数据无 color → 类型默认色）；
+            // note 无颜色概念走 CSS 琥珀兜底
+            const geom = a.type === "note" ? null : a.type;
+            const cur = geom ? (a.color ?? ANNO_DEFAULT_COLOR[geom]) : null;
+            const tone = geom && cur ? annoIconTone(cur) : undefined;
+            const label = labelOf(a);
+            return (
+              <div
+                key={a.id}
+                className={`anl-item ${a.page === currentPage ? "is-active" : ""}`}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("button")) return;
+                  onNavigate(a.page);
+                }}
+              >
+                <button
+                  type="button"
+                  className="anl-main"
+                  onClick={() => onNavigate(a.page)}
+                  title={`${typeName(a.type)} · ${a.page}${label ? ` · ${label}` : ""}`}
+                >
+                  <span
+                    className={`anl-ic ${a.type === "note" ? "is-note" : ""}`}
+                    style={tone}
+                    aria-hidden="true"
+                  >
+                    {typeIcon(a.type)}
+                  </span>
+                  <span className="anl-label">{label}</span>
+                </button>
+                <span className="anl-page">{a.page}</span>
+                {listEdit && (
+                  <button
+                    type="button"
+                    className="anl-del"
+                    onClick={() => onDelete(a.id)}
+                    title={t("annotateDelete")}
+                    aria-label={t("annotateDelete")}
+                  >
+                    <TrashIcon size={13} />
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }

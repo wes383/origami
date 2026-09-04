@@ -4,9 +4,11 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  type RefObject,
 } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { SearchMatch, SearchRect } from "../lib/search";
+import type { Annotation } from "../lib/annotations";
 import {
   getDestinationViewportPoint,
   type PdfDestination,
@@ -22,6 +24,8 @@ export type FlipMode = "scroll" | "paged";
 
 /** 无高亮页共用的空数组：保持引用稳定，避免破坏 PdfPage 的 memo */
 const EMPTY_RECTS: SearchRect[] = [];
+/** 无注释页共用的空数组：同上 */
+const EMPTY_ANN: Annotation[] = [];
 
 interface PdfViewerProps {
   doc: PDFDocumentProxy;
@@ -48,12 +52,22 @@ interface PdfViewerProps {
   basePage: { w: number; h: number };
   /** 全文查找结果（用于各页高亮） */
   searchMatches: SearchMatch[];
+  /** 用户注释（全文，按页码分组后逐页下发） */
+  annotations: Annotation[];
+  /** 点击注释 chip 的视口坐标回调 */
+  onAnnoOpen: (id: string, x: number, y: number) => void;
   /** 当前选中的匹配 id（强调样式） */
   activeMatchId: string | null;
   /** 需滚动定位到视口中心的匹配 id（匹配项切换时设置） */
   focusMatchId: string | null;
   /** 定位处理完毕后清空意图 */
   onFocusHandled: () => void;
+  /** 滚动容器 ref（由 App 持有并共用，供自动阅读驱动读写 scrollTop） */
+  containerRef: RefObject<HTMLDivElement | null>;
+  /** 本轮自动阅读是否由 useAutoReader 驱动（区分用户滚动与自动滚动） */
+  autoScrollingRef: RefObject<boolean>;
+  /** 用户手动滚动 / 方向键接管时暂停自动阅读 */
+  onAutoScrollInterrupt: () => void;
 }
 
 export default function PdfViewer({
@@ -72,11 +86,15 @@ export default function PdfViewer({
   onHeightChange,
   basePage,
   searchMatches,
+  annotations,
+  onAnnoOpen,
   activeMatchId,
   focusMatchId,
   onFocusHandled,
+  containerRef,
+  autoScrollingRef,
+  onAutoScrollInterrupt,
 }: PdfViewerProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
   /** 缩放锚点：保持鼠标指向的内容点不动 */
   const anchorRef = useRef<{ mx: number; my: number; cx: number; cy: number } | null>(null);
   /** 程序化跳转期间抑制观察器上报，避免滚动途中页码变化打断跳转 */
@@ -136,6 +154,11 @@ export default function PdfViewer({
           cy: (el.scrollTop + my) / effScale,
         };
         onZoomStep(e.deltaY < 0 ? 1 : -1);
+      } else if (flipMode === "scroll" && autoScrollingRef.current) {
+        // 滚动模式下自动阅读进行中：用户手动滚动即视为接管，暂停自动阅读
+        // （不 preventDefault，保留原生滚动，让用户能重新定位）。
+        // 翻页模式不在此打断：滚轮只微调当前页视图，不中断自动翻页节奏。
+        onAutoScrollInterrupt();
       }
     };
 
@@ -143,7 +166,7 @@ export default function PdfViewer({
     return () => {
       el.removeEventListener("wheel", onWheel);
     };
-  }, [effScale, onZoomStep]);
+  }, [effScale, onZoomStep, flipMode]);
 
   // 翻页模式：翻页后回到页面顶部。
   // 键盘/按钮翻页后容器 scrollTop 保留旧值，新页挂载后若不重置，
@@ -413,6 +436,18 @@ export default function PdfViewer({
     return map;
   }, [searchMatches]);
 
+  // 注释按页分组：同样预先展平，保证同一页在多次渲染间拿到稳定的数组引用
+  // （PdfPage 是 memo 组件，直接 filter 会破坏 memo，放大倍率切换时全量重渲染）
+  const annByPage = useMemo(() => {
+    const map = new Map<number, Annotation[]>();
+    for (const a of annotations) {
+      const list = map.get(a.page);
+      if (list) list.push(a);
+      else map.set(a.page, [a]);
+    }
+    return map;
+  }, [annotations]);
+
   // 匹配项定位：等待页跳转意图清空后（避免与滚动动画互相抢占），
   // 将当前匹配滚动到视口中心。单页模式换页后 DOM 稍晚挂载，用 rAF 轮询兜底
   useEffect(() => {
@@ -457,6 +492,8 @@ export default function PdfViewer({
       estimatedH={ph}
       visible={visible}
       highlights={rectsByPage.get(page) ?? EMPTY_RECTS}
+      annotations={annByPage.get(page) ?? EMPTY_ANN}
+      onAnnoOpen={onAnnoOpen}
       activeHighlightId={activeMatchId}
       onInternalLink={handleInternalLink}
       onExternalLink={handleExternalLink}

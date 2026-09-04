@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { readText, storageKey, writeText } from "../lib/storage";
 
 export type Theme = "light" | "dark";
 export type ThemePref = "light" | "dark" | "system";
 
-const STORAGE_KEY = "pdfreader-theme";
+const STORAGE_KEY = storageKey("theme");
 
 function initialPref(): ThemePref {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "light" || saved === "dark" || saved === "system") return saved;
-  } catch {
-    /* ignore */
-  }
+  const saved = readText(STORAGE_KEY);
+  if (saved === "light" || saved === "dark" || saved === "system") return saved;
   return "system";
 }
 
@@ -41,11 +38,7 @@ export function useTheme() {
 
   const setThemePref = useCallback((next: ThemePref) => {
     setPrefState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
+    writeText(STORAGE_KEY, next);
   }, []);
 
   /** 在 light/dark 间切换（system 视为当前生效主题的反面） */

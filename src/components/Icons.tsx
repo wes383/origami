@@ -43,6 +43,25 @@ export function StopIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 播放（lucide play，实心三角） */
+export function PlayIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M7 5.5v13a.5.5 0 0 0 .77.42l10-6.5a.5.5 0 0 0 0-.84l-10-6.5A.5.5 0 0 0 7 5.5Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** 暂停（lucide pause，双竖条） */
+export function PauseIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <rect x="7" y="5" width="3.2" height="14" rx="1" fill="currentColor" stroke="none" />
+      <rect x="13.8" y="5" width="3.2" height="14" rx="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** 上箭头（lucide chevron-up） */
 export function ChevronUpIcon({ size = 16 }: IconProps) {
   return (
@@ -325,6 +344,38 @@ export function ChevronDownIcon({ size = 16 }: IconProps) {
   );
 }
 
+/** 书签（lucide bookmark） */
+export function BookmarkIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+/** 添加书签（lucide bookmark-plus：书签轮廓 + 中央加号） */
+export function BookmarkPlusIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+      <path d="M12 7.5v5M9.5 10h5" />
+    </svg>
+  );
+}
+
+/** 已加书签（lucide bookmark 实心填充态） */
+export function BookmarkFilledIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path
+        d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </svg>
+  );
+}
+
 /** 百科/全球（lucide globe） */
 export function GlobeIcon({ size = 16 }: IconProps) {
   return (
@@ -384,6 +435,131 @@ export function PencilIcon({ size = 16 }: IconProps) {
     <svg {...base(size)}>
       <path d="M21.17 6.83a2.83 2.83 0 0 0-4-4L3.84 16.17a2 2 0 0 0-.5.83L2 22l5-1.34a2 2 0 0 0 .83-.5z" />
       <path d="m15 5 4 4" />
+    </svg>
+  );
+}
+
+/** 查找选项：区分大小写（lucide case-sensitive，大 A + 小 a） */
+export function CaseIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16" />
+      <path d="M22 9v7" />
+      <path d="M3.304 13h6.392" />
+      <circle cx="18.5" cy="12.5" r="3.5" />
+    </svg>
+  );
+}
+
+/** 查找选项：全词匹配（lucide whole-word，双字符带边界竖线 + 下划线） */
+export function WordIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <circle cx="7" cy="12" r="3" />
+      <path d="M10 9v6" />
+      <circle cx="17" cy="12" r="3" />
+      <path d="M14 7v8" />
+      <path d="M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1" />
+    </svg>
+  );
+}
+
+/** 注释入口（lucide pen-line：基线 + 斜置笔尖） */
+export function AnnotateIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M12 20h9" />
+      <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
+    </svg>
+  );
+}
+
+/** 注释过滤：全部类型（lucide layers，多层堆叠 = 不限类型） */
+export function StackIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </svg>
+  );
+}
+
+/** 查找选项：正则表达式（lucide regex，星号 + 方块字符） */
+export function RegexIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M17 3v10" />
+      <path d="m12.67 5.5 8.66 5" />
+      <path d="m12.67 10.5 8.66-5" />
+      <path d="M9 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2z" />
+    </svg>
+  );
+}
+
+/** 注释：高亮荧光笔（lucide highlighter） */
+export function HighlighterIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="m9 11-6 6v3h9l3-3" />
+      <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+    </svg>
+  );
+}
+
+/** 注释：下划线（lucide underline，U 形 + 底部横线） */
+export function UnderlineIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M6 4v6a6 6 0 0 0 12 0V4" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
+/** 注释：删除线（lucide strikethrough） */
+export function StrikethroughIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M16 4H9a3 3 0 0 0-2.83 4" />
+      <path d="M14 12a4 4 0 0 1 0 8H6" />
+      <path d="M4 12h16" />
+    </svg>
+  );
+}
+
+/** 注释：便签（lucide sticky-note，纸片折角） */
+export function StickyNoteIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
+      <path d="M15 3v6h6" />
+    </svg>
+  );
+}
+
+/** 总结/摘要（lucide file-text：带折角文档 + 三条正文线） */
+export function FileTextIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M10 9H8" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+    </svg>
+  );
+}
+
+/** 删除（lucide trash-2，垃圾桶 + 两条横线） */
+export function TrashIcon({ size = 16 }: IconProps) {
+  return (
+    <svg {...base(size)}>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
     </svg>
   );
 }

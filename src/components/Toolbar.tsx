@@ -2,11 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useI18n, UI_LANGS } from "../i18n";
 import type { ThemePref } from "../hooks/useTheme";
+import type { PageFilter } from "../hooks/usePageFilter";
+import { useFullscreenToolbar } from "../hooks/useFullscreenToolbar";
 import type { PageLayout, FlipMode } from "./PdfViewer";
 import {
+  AnnotateIcon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  BookmarkIcon,
+  BookmarkPlusIcon,
+  BookmarkFilledIcon,
   DocIcon,
   FitPageIcon,
   FitWidthIcon,
@@ -22,6 +28,8 @@ import {
   PinIcon,
   PinOffIcon,
   PlusIcon,
+  PlayIcon,
+  PauseIcon,
   PrinterIcon,
   RotateIcon,
   SearchIcon,
@@ -32,23 +40,6 @@ import type { SidebarTab } from "./Sidebar";
 
 /** ≤此宽度时隐藏工具栏缩放控件（改由「更多操作」菜单提供） */
 const ZOOM_HIDDEN_BELOW = 650;
-
-/** 全屏 auto-hide「顶部区域」边界：鼠标在该 y 内（工具栏高 52 + 缓冲 8）
-    唤醒工具栏；之外则延迟隐藏。唤醒与隐藏共用同一把尺子 —— 快移甩动鼠标后
-    停驻位置常在 y 8~60 之间，唤醒带过窄（如 8px）会漏掉，导致工具栏不出现 */
-const FS_BAR_SHOW_ZONE = 60;
-/** 移出工具栏区域后延迟隐藏的毫秒数（防鼠标快速掠过误触发） */
-const FS_BAR_HIDE_DELAY = 400;
-
-/** auto-hide 的全局指针事件：优先 pointerrawupdate（Chromium 原始事件流，
-    不做 coalescing 合并）。触控板快速滑动时事件流极密，WebView2 对
-    pointermove 的合并可能让最后一个事件停在半路（实际指针已到顶部）导致
-    唤醒漏判；pointerrawupdate 每帧原始上报，无合并丢失。非 Chromium
-    环境回退 pointermove。 */
-const POINTER_EVT: "pointerrawupdate" | "pointermove" =
-  typeof window !== "undefined" && "onpointerrawupdate" in window
-    ? "pointerrawupdate"
-    : "pointermove";
 
 interface ToolbarProps {
   fileName: string;
@@ -77,6 +68,8 @@ interface ToolbarProps {
   onSetScale: (scale: number) => void;
   themePref: ThemePref;
   onSetThemePref: (pref: ThemePref) => void;
+  /** 页面滤镜（护眼/夜间反色/纸色/自定义）：usePageFilter 的返回值 */
+  pageFilter: PageFilter;
   onOpen: () => void;
   /** 关闭当前文件，回到引导页 */
   onCloseFile: () => void;
@@ -103,6 +96,14 @@ interface ToolbarProps {
   /** 切换右侧 AI 面板 */
   onToggleRightPanel: () => void;
   disabled: boolean;
+  /** 自动阅读是否正在播放（控制播放/暂停图标与高亮态） */
+  autoPlaying: boolean;
+  /** 播放/暂停切换（空格键同样触发） */
+  onToggleAuto: () => void;
+  /** 当前页是否已加书签（决定更多操作菜单项显示「添加」还是「移除」） */
+  bookmarkedCurrent: boolean;
+  /** 切换当前页书签（添加/移除） */
+  onToggleBookmark: () => void;
 }
 
 export default function Toolbar({
@@ -127,6 +128,7 @@ export default function Toolbar({
   onSetScale,
   themePref,
   onSetThemePref,
+  pageFilter,
   onOpen,
   onCloseFile,
   onOpenAiSettings,
@@ -141,6 +143,10 @@ export default function Toolbar({
   rightPanelOpen,
   onToggleRightPanel,
   disabled,
+  autoPlaying,
+  onToggleAuto,
+  bookmarkedCurrent,
+  onToggleBookmark,
 }: ToolbarProps) {
   const { t, lang, setLang } = useI18n();
   const [pageInput, setPageInput] = useState(String(currentPage));
@@ -158,103 +164,14 @@ export default function Toolbar({
   const [narrow, setNarrow] = useState(
     () => window.innerWidth <= ZOOM_HIDDEN_BELOW
   );
-  /** 全屏 auto-hide：工具栏是否显示（鼠标在顶部触发带内显示，移出后延迟隐藏） */
-  const [fsBarVisible, setFsBarVisible] = useState(false);
-  const fsHideTimerRef = useRef<number | null>(null);
-  /** 全屏时是否锁定工具栏（点击图钉按钮后永久固定，不再 auto-hide） */
-  const [fsBarPinned, setFsBarPinned] = useState(false);
-  const fsBarPinnedRef = useRef(fsBarPinned);
-  /** 菜单打开时禁止隐藏（下拉在工具栏下方展开，鼠标落在其上是合法交互） */
-  const menuOpenRef = useRef(menuOpen);
-  const langMenuOpenRef = useRef(langMenuOpen);
-  const moreOpenRef = useRef(moreOpen);
-
-  useEffect(() => {
-    menuOpenRef.current = menuOpen;
-  }, [menuOpen]);
-
-  useEffect(() => {
-    langMenuOpenRef.current = langMenuOpen;
-  }, [langMenuOpen]);
-
-  useEffect(() => {
-    moreOpenRef.current = moreOpen;
-  }, [moreOpen]);
-
-  useEffect(() => {
-    fsBarPinnedRef.current = fsBarPinned;
-  }, [fsBarPinned]);
-
-  /** 记录上一个全屏状态：进入全屏（false→true）时默认固定工具栏，
-      用户可点图钉自行取消；退出全屏时由 auto-hide effect 重置回非固定 */
-  const prevFullscreenRef = useRef(isFullscreen);
-  useEffect(() => {
-    if (isFullscreen && !prevFullscreenRef.current) {
-      setFsBarPinned(true);
-    }
-    prevFullscreenRef.current = isFullscreen;
-  }, [isFullscreen]);
-
-  // 全屏 auto-hide 工具栏。隐藏路径以 DOM 的 pointerleave 为准（鼠标离开工具栏
-  // 元素必然触发，不受原生 Snap Overlay 拦截 / clientY 阈值 / 事件丢失影响）；
-  // 全局 pointermove 只负责两件事：
-  //   1) 唤醒：鼠标在「顶部区域」（y ≤ FS_BAR_SHOW_ZONE）→ 滑入。
-  //      唤醒带与工具栏区域同宽（52+8），而非窄边带 —— 快移甩动鼠标后停驻
-  //      位置常在 y 8~60 之间，窄唤醒带（如 8px）会漏掉导致工具栏不出现；
-  //      与顶部唤醒探针条（.fs-bar-probe，覆盖同一区域）双保险。
-  //   2) 兜底：鼠标在 y > FS_BAR_SHOW_ZONE 且菜单未开 → 延迟隐藏
-  //      （覆盖「菜单关闭后鼠标停留在内容区」等没有 leave 触发的场景）
-  // 顶部区域内不会触发隐藏（唤醒幂等）；隐藏统一由 header/探针条 pointerleave
-  // 定时驱动，全局坐标不再参与隐藏判定。
-  // 菜单打开时禁止隐藏（下拉在工具栏下方展开，鼠标落在其上是合法交互）。
-  useEffect(() => {
-    if (!isFullscreen) {
-      setFsBarVisible(false);
-      setFsBarPinned(false);
-      if (fsHideTimerRef.current) {
-        window.clearTimeout(fsHideTimerRef.current);
-        fsHideTimerRef.current = null;
-      }
-      return;
-    }
-    const clearHideTimer = () => {
-      if (fsHideTimerRef.current) {
-        window.clearTimeout(fsHideTimerRef.current);
-        fsHideTimerRef.current = null;
-      }
-    };
-    const scheduleHide = () => {
-      if (fsHideTimerRef.current) return;
-      fsHideTimerRef.current = window.setTimeout(() => {
-        fsHideTimerRef.current = null;
-        setFsBarVisible(false);
-      }, FS_BAR_HIDE_DELAY);
-    };
-    const onPointerMove = (e: PointerEvent) => {
-      // 锁定工具栏：不参与 auto-hide（唤醒/兜底全部跳过）
-      if (fsBarPinnedRef.current) return;
-      const y = e.clientY;
-      if (
-        y <= FS_BAR_SHOW_ZONE ||
-        menuOpenRef.current ||
-        moreOpenRef.current ||
-        langMenuOpenRef.current
-      ) {
-        clearHideTimer();
-        setFsBarVisible(true);
-      } else if (y > FS_BAR_SHOW_ZONE) {
-        scheduleHide();
-      }
-    };
-    // pointerrawupdate 与 pointermove 的联合事件名会让 TS 把监听器推断为
-    // 通用 EventListener，需断言回 PointerEvent（clientY 来自 PointerEvent）
-    const onPointerMoveHandler = onPointerMove as EventListener;
-    window.addEventListener(POINTER_EVT, onPointerMoveHandler);
-    return () => {
-      window.removeEventListener(POINTER_EVT, onPointerMoveHandler);
-      clearHideTimer();
-    };
-  }, [isFullscreen]);
+  // 全屏 auto-hide 状态机（唤醒带/探针条/图钉/菜单抑制隐藏）见 hook 注释
+  const {
+    barVisible: fsBarVisible,
+    pinned: fsBarPinned,
+    showBar: showFsBar,
+    handleBarPointerLeave,
+    togglePinned: toggleFsBarPinned,
+  } = useFullscreenToolbar({ isFullscreen, menuOpen, moreOpen, langMenuOpen });
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${ZOOM_HIDDEN_BELOW}px)`);
@@ -356,16 +273,6 @@ export default function Toolbar({
   const prevDisabled = disabled || currentPage <= 1;
   const nextDisabled = disabled || currentPage >= numPages;
 
-  /** 显示工具栏：清掉待执行的隐藏定时并置可见。
-      被 header 的 onPointerEnter 与顶部唤醒探针条共用 */
-  const showFsBar = () => {
-    if (fsHideTimerRef.current) {
-      window.clearTimeout(fsHideTimerRef.current);
-      fsHideTimerRef.current = null;
-    }
-    setFsBarVisible(true);
-  };
-
   const switchLang = (next: (typeof UI_LANGS)[number]["id"]) => setLang(next);
 
   return (
@@ -380,25 +287,8 @@ export default function Toolbar({
         }`}
         data-tauri-drag-region={isFullscreen ? "false" : ""}
         onPointerEnter={showFsBar}
-      onPointerLeave={() => {
-        // 鼠标离开工具栏：延迟隐藏（菜单打开时鼠标在下拉菜单上，保持显示）。
-        // DOM pointerleave 在鼠标移出元素（含移到原生 Snap Overlay 上）时必然
-        // 触发，比全局 clientY 阈值可靠。锁定工具栏时永不隐藏。
-        if (
-          fsBarPinned ||
-          menuOpenRef.current ||
-          moreOpenRef.current ||
-          langMenuOpenRef.current
-        )
-          return;
-        if (!fsHideTimerRef.current) {
-          fsHideTimerRef.current = window.setTimeout(() => {
-            fsHideTimerRef.current = null;
-            setFsBarVisible(false);
-          }, FS_BAR_HIDE_DELAY);
-        }
-      }}
-    >
+        onPointerLeave={handleBarPointerLeave}
+      >
       {/* 左：菜单 + 文件名 */}
       <div className="tb-group tb-left">
         {/* 设置下拉菜单 */}
@@ -590,6 +480,102 @@ export default function Toolbar({
                 </button>
               </div>
 
+              {/* 页面滤镜：纯 CSS filter，阅读区与缩略图跟随，打印恒为原色 */}
+              <div className="tb-dropdown-label">{t("pageFilter")}</div>
+              <div className="tb-dropdown-row">
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${pageFilter.mode === "off" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={pageFilter.mode === "off"}
+                  onClick={() => pageFilter.setMode("off")}
+                >
+                  {t("filterOff")}
+                </button>
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${pageFilter.mode === "night" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={pageFilter.mode === "night"}
+                  onClick={() => pageFilter.setMode("night")}
+                >
+                  {t("filterNight")}
+                </button>
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${pageFilter.mode === "paper" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={pageFilter.mode === "paper"}
+                  onClick={() => pageFilter.setMode("paper")}
+                >
+                  {t("filterPaper")}
+                </button>
+                <button
+                  type="button"
+                  className={`tb-dropdown-choice ${pageFilter.mode === "custom" ? "is-active" : ""}`}
+                  role="menuitemradio"
+                  aria-checked={pageFilter.mode === "custom"}
+                  onClick={() => pageFilter.setMode("custom")}
+                >
+                  {t("filterCustom")}
+                </button>
+              </div>
+              {pageFilter.mode === "custom" && (
+                <div className="tb-filter-sliders">
+                  <div className="tb-filter-slider">
+                    <span>{t("filterBrightness")}</span>
+                    <input
+                      type="range"
+                      min={50}
+                      max={150}
+                      step={1}
+                      value={pageFilter.custom.brightness}
+                      aria-label={t("filterBrightness")}
+                      onChange={(e) =>
+                        pageFilter.setCustom({ brightness: Number(e.target.value) })
+                      }
+                    />
+                    <span className="tb-filter-slider-value">
+                      {pageFilter.custom.brightness}%
+                    </span>
+                  </div>
+                  <div className="tb-filter-slider">
+                    <span>{t("filterContrast")}</span>
+                    <input
+                      type="range"
+                      min={50}
+                      max={150}
+                      step={1}
+                      value={pageFilter.custom.contrast}
+                      aria-label={t("filterContrast")}
+                      onChange={(e) =>
+                        pageFilter.setCustom({ contrast: Number(e.target.value) })
+                      }
+                    />
+                    <span className="tb-filter-slider-value">
+                      {pageFilter.custom.contrast}%
+                    </span>
+                  </div>
+                  <div className="tb-filter-slider">
+                    <span>{t("filterWarmth")}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={pageFilter.custom.warmth}
+                      aria-label={t("filterWarmth")}
+                      onChange={(e) =>
+                        pageFilter.setCustom({ warmth: Number(e.target.value) })
+                      }
+                    />
+                    <span className="tb-filter-slider-value">
+                      {pageFilter.custom.warmth}%
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="tb-dropdown-separator" />
 
               <button
@@ -764,14 +750,7 @@ export default function Toolbar({
           <button
             type="button"
             className="tb-btn icon-only"
-            onClick={() => {
-              setFsBarPinned((v) => !v);
-              // 取消可能已调度的隐藏定时，避免解锁瞬间工具栏闪没
-              if (fsHideTimerRef.current) {
-                window.clearTimeout(fsHideTimerRef.current);
-                fsHideTimerRef.current = null;
-              }
-            }}
+            onClick={toggleFsBarPinned}
             title={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
             aria-label={fsBarPinned ? t("unpinToolbar") : t("pinToolbar")}
             aria-pressed={fsBarPinned}
@@ -838,6 +817,63 @@ export default function Toolbar({
                 )}
               </button>
 
+              {/* 书签列表侧边栏开关 */}
+              <button
+                type="button"
+                className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "bookmarks" ? "is-active" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={sidebarOpen && sidebarTab === "bookmarks"}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onToggleSidebar("bookmarks");
+                }}
+              >
+                <BookmarkIcon />
+                <span>{t("bookmarks")}</span>
+                {sidebarOpen && sidebarTab === "bookmarks" && (
+                  <span className="tb-item-check">
+                    <CheckIcon size={14} />
+                  </span>
+                )}
+              </button>
+
+              {/* 注释列表侧边栏开关 */}
+              <button
+                type="button"
+                className={`tb-dropdown-item ${sidebarOpen && sidebarTab === "annotations" ? "is-active" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={sidebarOpen && sidebarTab === "annotations"}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onToggleSidebar("annotations");
+                }}
+              >
+                <AnnotateIcon />
+                <span>{t("annotateTools")}</span>
+                {sidebarOpen && sidebarTab === "annotations" && (
+                  <span className="tb-item-check">
+                    <CheckIcon size={14} />
+                  </span>
+                )}
+              </button>
+
+              {/* 添加/移除当前页书签（实心 = 已标记；点击切换） */}
+              <button
+                type="button"
+                className={`tb-dropdown-item ${bookmarkedCurrent ? "is-active" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={bookmarkedCurrent}
+                onClick={() => {
+                  setMoreOpen(false);
+                  onToggleBookmark();
+                }}
+              >
+                {bookmarkedCurrent ? <BookmarkFilledIcon /> : <BookmarkPlusIcon />}
+                <span>
+                  {bookmarkedCurrent ? t("removeBookmark") : t("addBookmark")}
+                </span>
+              </button>
+
               {/* 翻译侧边栏开关 */}
               <button
                 type="button"
@@ -852,6 +888,23 @@ export default function Toolbar({
                 <LanguagesIcon />
                 <span>{t("aiSidebar")}</span>
                 {rightPanelOpen && (
+                  <span className="tb-item-check">
+                    <CheckIcon size={14} />
+                  </span>
+                )}
+              </button>
+
+              {/* 自动阅读：播放/暂停（速度在页面底部浮动条调节） */}
+              <button
+                type="button"
+                className={`tb-dropdown-item ${autoPlaying ? "is-active" : ""}`}
+                role="menuitemcheckbox"
+                aria-checked={autoPlaying}
+                onClick={() => onToggleAuto()}
+              >
+                {autoPlaying ? <PauseIcon /> : <PlayIcon />}
+                <span>{autoPlaying ? t("autoScrollPause") : t("autoScroll")}</span>
+                {autoPlaying && (
                   <span className="tb-item-check">
                     <CheckIcon size={14} />
                   </span>
@@ -883,12 +936,7 @@ export default function Toolbar({
                   aria-checked={fsBarPinned}
                   onClick={() => {
                     setMoreOpen(false);
-                    setFsBarPinned((v) => !v);
-                    // 取消可能已调度的隐藏定时，避免解锁瞬间工具栏闪没
-                    if (fsHideTimerRef.current) {
-                      window.clearTimeout(fsHideTimerRef.current);
-                      fsHideTimerRef.current = null;
-                    }
+                    toggleFsBarPinned();
                   }}
                 >
                   {fsBarPinned ? <PinOffIcon /> : <PinIcon />}

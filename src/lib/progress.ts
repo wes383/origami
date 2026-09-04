@@ -6,6 +6,7 @@
  */
 
 import type { PageLayout, FlipMode } from "../components/PdfViewer";
+import { readJson, storageKey, writeJson } from "./storage";
 
 /** 缩放模式：跟随宽度 / 适合页面 / 自定义倍率 */
 export type ScaleMode = "fit-width" | "fit-page" | "custom";
@@ -25,30 +26,23 @@ export interface ReadProgress {
   flipMode: FlipMode;
 }
 
-const KEY = "origami.read-progress";
+const KEY = storageKey("read-progress");
 /** 最多保留的文档数：超出丢弃最久未读的 */
 const MAX_ENTRIES = 200;
 
 type Store = Record<string, ReadProgress & { at: number }>;
 
 function loadStore(): Store {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed as Store;
-  } catch {
-    return {};
-  }
+  return readJson<Store>(KEY, {});
 }
 
 function saveStore(store: Store): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(store));
-  } catch {
-    /* 存储不可用（隐私模式/配额满）时仅内存生效，不影响阅读 */
-  }
+  if (writeJson(KEY, store)) return;
+  // 配额失败降级：按最后阅读时间舍弃一半最旧条目后重试（再失败则放弃，仅内存生效）
+  const keys = Object.keys(store);
+  keys.sort((a, b) => (store[a].at ?? 0) - (store[b].at ?? 0));
+  for (const k of keys.slice(0, Math.ceil(keys.length / 2))) delete store[k];
+  writeJson(KEY, store);
 }
 
 /** 读取某文档的进度；无记录返回 null */

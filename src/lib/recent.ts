@@ -1,5 +1,7 @@
 /** 最近打开文件列表（localStorage 持久化） */
 
+import { readJson, removeKey, storageKey, writeJson } from "./storage";
+
 export interface RecentFile {
   path: string;
   name: string;
@@ -7,22 +9,16 @@ export interface RecentFile {
   at: number;
 }
 
-const KEY = "origami.recent-files";
+const KEY = storageKey("recent-files");
 const MAX = 8;
 
 export function loadRecent(): RecentFile[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is RecentFile =>
-        item && typeof item.path === "string" && typeof item.at === "number"
-    );
-  } catch {
-    return [];
-  }
+  const parsed = readJson<unknown>(KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(
+    (item): item is RecentFile =>
+      item && typeof item.path === "string" && typeof item.at === "number"
+  );
 }
 
 /** 记录一次打开：去重置顶，超出上限丢弃最旧项，返回新列表 */
@@ -32,30 +28,19 @@ export function addRecent(path: string): RecentFile[] {
     { path, name, at: Date.now() },
     ...loadRecent().filter((item) => item.path !== path),
   ].slice(0, MAX);
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* 存储不可用时仅内存生效 */
-  }
+  // 写入失败（存储不可用/配额满）仅内存生效
+  writeJson(KEY, next);
   return next;
 }
 
 export function clearRecent(): RecentFile[] {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  removeKey(KEY);
   return [];
 }
 
 /** 删除单条记录，返回新列表 */
 export function removeRecent(path: string): RecentFile[] {
   const next = loadRecent().filter((item) => item.path !== path);
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* ignore */
-  }
+  writeJson(KEY, next);
   return next;
 }

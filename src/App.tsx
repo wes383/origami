@@ -2,19 +2,29 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import type { OpenedPdf, OutlineNode } from "./lib/pdf";
-import { openPdf, loadOutline } from "./lib/pdf";
 import type { SearchMatch } from "./lib/search";
 import { printDocument } from "./lib/print";
+import { saveProgress, type FitIntent, type ScaleMode } from "./lib/progress";
 import {
-  loadProgress,
-  saveProgress,
-  type FitIntent,
-  type ScaleMode,
-} from "./lib/progress";
-import { useI18n, type LangKeys } from "./i18n";
+  loadBookmarks,
+  toggleBookmark,
+  addBookmark,
+  removeBookmarkAt,
+  renameBookmark,
+  type Bookmark,
+} from "./lib/bookmarks";
+import {
+  loadAnnotations,
+  addAnnotation,
+  removeAnnotation,
+  updateAnnotationColor,
+  updateAnnotationNote,
+  type Annotation,
+  type AnnotationType,
+} from "./lib/annotations";
+import type { CaptureSelection } from "./lib/textLayerSelection";
+import { useI18n } from "./i18n";
 import { useTheme } from "./hooks/useTheme";
 import {
   addRecent,
@@ -23,20 +33,27 @@ import {
   removeRecent,
   type RecentFile,
 } from "./lib/recent";
+import { readText, storageKey, writeText } from "./lib/storage";
 import { takeStartupFile, onOpenFile } from "./lib/startupFile";
 import Toolbar from "./components/Toolbar";
+import AutoReaderBar from "./components/AutoReaderBar";
 import PdfViewer, { type PageLayout, type FlipMode } from "./components/PdfViewer";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import SearchBar from "./components/SearchBar";
 import PrintDialog from "./components/PrintDialog";
 import PasswordDialog from "./components/PasswordDialog";
 import TranslatePopup from "./components/TranslatePopup";
+import AnnotationPopup from "./components/AnnotationPopup";
 import RightPanel from "./components/RightPanel";
 import { useTextActionEngine, type RightTab } from "./hooks/useTextActionEngine";
+import { useDocumentSession } from "./hooks/useDocumentSession";
+import { usePageFilter } from "./hooks/usePageFilter";
+import { useAutoReader } from "./hooks/useAutoReader";
 import AiSettingsModal from "./components/AiSettingsModal";
 import ShortcutsHelp from "./components/ShortcutsHelp";
 import FilePropertiesModal from "./components/FilePropertiesModal";
 import EmptyState from "./components/EmptyState";
+import ErrorBoundary, { ViewerErrorFallback } from "./components/ErrorBoundary";
 import { DocIcon } from "./components/Icons";
 
 /** 手动缩放档位（参考 Chrome） */
@@ -46,26 +63,18 @@ const READER_PADDING_X_NARROW = 24; // ≤720px 窄断点（12px × 2），与 g
 const READER_PADDING_Y = 56; // 阅读区上下留白（28px × 2）
 const DOUBLE_PAGE_GAP = 16; // 双页模式两页之间的间隙，与 global.css .pdf-slot-pair 一致
 
-/** 侧边栏展开偏好的 localStorage key：记住用户上次手动展开/关闭，打开文档时应用 */
-const SIDEBAR_PREF_KEY = "pdfreader-sidebar-pref";
+/** 侧边栏展开偏好的存储 key：记住用户上次手动展开/关闭，打开文档时应用 */
+const SIDEBAR_PREF_KEY = storageKey("sidebar-pref");
 
 /** 读取偏好；无记录（首次使用）默认展开，兼容旧行为（含目录的文档自动展开） */
 function loadSidebarPref(): boolean {
-  try {
-    return localStorage.getItem(SIDEBAR_PREF_KEY) !== "closed";
-  } catch {
-    return true;
-  }
+  return readText(SIDEBAR_PREF_KEY) !== "closed";
 }
 
 /** 保存偏好：仅在用户手动操作（开关按钮 / 关闭按钮 / 快捷键）时调用，
     程序自动设置（打开/关闭文档时的重置）不得调用，避免覆盖用户选择 */
 function saveSidebarPref(open: boolean) {
-  try {
-    localStorage.setItem(SIDEBAR_PREF_KEY, open ? "open" : "closed");
-  } catch {
-    // 忽略（隐私模式等 localStorage 不可用场景）
-  }
+  writeText(SIDEBAR_PREF_KEY, open ? "open" : "closed");
 }
 
 export type { ScaleMode };
@@ -73,13 +82,9 @@ export type { ScaleMode };
 export default function App() {
   const { t } = useI18n();
   const { pref: themePref, setThemePref } = useTheme();
+  /** 页面滤镜（护眼/夜间反色/纸色/自定义）：写 --page-filter 变量供 CSS 消费 */
+  const pageFilter = usePageFilter();
 
-  const [pdf, setPdf] = useState<OpenedPdf | null>(null);
-  const [fileName, setFileName] = useState("");
-  /** 当前文件完整路径（文件属性弹窗展示） */
-  const [filePath, setFilePath] = useState("");
-  const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
   /** 用户显式跳转意图（页码输入/前后翻页）。追踪观察器只跟随滚动，不触发滚动 */
   const [jumpTarget, setJumpTarget] = useState<number | null>(null);
   const [pageLayout, setPageLayout] = useState<PageLayout>("single");
@@ -109,13 +114,7 @@ export default function App() {
   const [basePage, setBasePage] = useState<{ w: number; h: number } | null>(null);
   /** fit 倍率的基准页：当前页的真实尺寸（各页尺寸可能不同） */
   const [refPage, setRefPage] = useState<{ w: number; h: number } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [errorKey, setErrorKey] = useState<LangKeys | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  /** 加密文档密码输入弹窗 */
-  const [passwordOpen, setPasswordOpen] = useState(false);
-  /** 当前密码是否已判错一次（用于弹窗提示与重新弹出） */
-  const [passwordWrong, setPasswordWrong] = useState(false);
   /** 阅读区左右留白（跟随 CSS 断点：≤720px 减半） */
   const [narrowWindow, setNarrowWindow] = useState(
     () => typeof window !== "undefined" && window.innerWidth <= 720
@@ -130,8 +129,6 @@ export default function App() {
   const [filePropsOpen, setFilePropsOpen] = useState(false);
   /** 全屏模式（Tauri 原生窗口全屏） */
   const [isFullscreen, setIsFullscreen] = useState(false);
-  /** 当前文档的目录树 */
-  const [outline, setOutline] = useState<OutlineNode[]>([]);
   /** 侧边栏展开状态 */
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** 侧边栏当前标签页（目录 / 缩略图） */
@@ -140,6 +137,100 @@ export default function App() {
   const [rightOpen, setRightOpen] = useState(false);
   /** 右侧面板当前标签页（AI 翻译 / Wikipedia） */
   const [rightTab, setRightTab] = useState<RightTab>("translate");
+  /** 当前文档的用户书签（按页码升序），跟随 filePath 加载/清空 */
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  /** 当前文档的用户注释（含高亮/下划线/删除线/文字批注），跟随 filePath 加载/清空 */
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  /** 注释浮层：chip 或新建批注触发；含锚点视口坐标与是否聚焦批注输入框 */
+  const [annoSel, setAnnoSel] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    focus: boolean;
+  } | null>(null);
+
+  // ---------- 文档会话（打开 / 状态 / 关闭） ----------
+  // 文档生命周期状态（pdf / 文件名 / 路径 / 页数 / 当前页 / 目录）由
+  // useDocumentSession 管理；视图偏好在 onOpened 回调里恢复
+
+  const {
+    pdf,
+    fileName,
+    filePath,
+    numPages,
+    currentPage,
+    setCurrentPage,
+    outline,
+    loading,
+    errorKey,
+    setErrorKey,
+    currentPathRef,
+    pageSizesRef,
+    loadFile,
+    closeFile,
+    passwordOpen,
+    passwordWrong,
+    handlePasswordSubmit,
+    handlePasswordCancel,
+  } = useDocumentSession({
+    /** 文档就绪后恢复视图偏好、记录最近文件、清查找结果、跳回上次阅读页 */
+    onOpened: ({ path, restored, firstPage, page }) => {
+      setBasePage(firstPage);
+      setRefPage(firstPage);
+
+      // 恢复上次的视图偏好；无记录时默认固定 100%（不再自适应）
+      setScaleMode(restored?.scaleMode ?? "custom");
+      setFitIntent(restored?.fitIntent ?? "fit-width");
+      setScale(restored?.scale ?? 1);
+      setRotation(restored?.rotation ?? 0);
+      setPageLayout(restored?.pageLayout ?? "single");
+      setFlipMode(restored?.flipMode ?? "scroll");
+
+      setRecentFiles(addRecent(path));
+      setSidebarTab("outline");
+      // 载入该文档已保存的书签（localStorage 按文件路径持久化）
+      setBookmarks(loadBookmarks(path));
+      // 载入该文档的用户注释（高亮/下划线/删除线/批注，同样按路径持久化）
+      setAnnotations(loadAnnotations(path));
+
+      // 新文档：清空上一个文档的查找结果
+      setSearchMatches([]);
+      setActiveMatchId(null);
+      setFocusMatchId(null);
+
+      // 恢复到上次阅读页（首开时即第 1 页，无需滚动）
+      if (page > 1) setJumpTarget(page);
+    },
+    /** 侧边栏默认状态：应用用户上次手动选择的展开/关闭偏好（无记录时默认展开）；
+        文档本身无目录时无论偏好如何都不展开（没有可导航的内容） */
+    onOutlineLoaded: (parsedOutline) => {
+      setSidebarOpen(loadSidebarPref() && parsedOutline.length > 0);
+    },
+    /** 关闭文档后重置视图层状态 */
+    onClosed: () => {
+      setJumpTarget(null);
+      setBasePage(null);
+      setRefPage(null);
+      setScaleMode("custom");
+      setScale(1);
+      setFitScale(1);
+      setFitPageScale(1);
+      setRotation(0);
+      setSidebarOpen(false);
+      setSidebarTab("outline");
+      setBookmarks([]);
+      setAnnotations([]);
+      setAnnoSel(null);
+      setRightOpen(false);
+      setRightTab("translate");
+      setSearchOpen(false);
+      setSearchMatches([]);
+      setActiveMatchId(null);
+      setFocusMatchId(null);
+      setPrinting(false);
+      setPrintProgress(null);
+    },
+  });
 
   /** 划词翻译 / Wikipedia 引擎：统一管理请求与结果（浮动 + 右侧面板两处呈现）。
    *  依据右侧面板开合与当前 tab 决定结果落点。 */
@@ -148,6 +239,12 @@ export default function App() {
     onOpenSettings: openAiSettings,
     rightPanel: { open: rightOpen, tab: rightTab },
   });
+
+  /** 阅读区滚动容器（自动阅读驱动与 PdfViewer 共用同一 ref 读写 scrollTop） */
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  /** currentPage 的镜像 ref：自动阅读驱动读取最新值，避免把 currentPage 列入依赖导致重建 */
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
 
   /** 切换文档（或关闭）时清空右侧面板残留内容，避免旧结果串入新文档 */
   useEffect(() => {
@@ -159,14 +256,8 @@ export default function App() {
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [focusMatchId, setFocusMatchId] = useState<string | null>(null);
 
-  /** 当前文档路径（进度持久化与打印进度的 key；不含文件名） */
-  const currentPathRef = useRef<string>("");
-  /** 当前文档对象：loadFile/closeFile 里直接取，避免 setState 闭包过期 */
-  const pdfRef = useRef<OpenedPdf | null>(null);
   /** 进度保存去抖：滚动连发时只落最后一次 */
   const progressTimerRef = useRef<number | null>(null);
-  /** 待密码打开的文档数据（密码输入弹窗回调用） */
-  const pendingPasswordRef = useRef<Uint8Array | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 720px)");
@@ -227,182 +318,14 @@ export default function App() {
   const canZoomIn = effScale < ZOOM_LEVELS[ZOOM_LEVELS.length - 1] - 0.01;
   const canZoomOut = effScale > ZOOM_LEVELS[0] + 0.01;
 
-  const loadFileRef = useRef<(path: string) => void>(() => {});
-  /** 各页尺寸缓存（scale=1），避免重复 getPage */
-  const pageSizesRef = useRef(new Map<number, { w: number; h: number }>());
-
-  // ---------- 打开文件 ----------
-
-  /** 关闭上一份文档（销毁 worker 资源）。副作用放函数体，不走 setState updater */
-  const destroyCurrent = useCallback(() => {
-    const prev = pdfRef.current;
-    if (prev) void prev.destroy();
-  }, []);
-
-  const loadFile = useCallback(
-    async (path: string) => {
-      if (!/\.pdf$/i.test(path)) {
-        setErrorKey("errorNotPdf");
-        return;
-      }
-      setLoading(true);
-      setErrorKey(null);
-      let opened: OpenedPdf;
-      try {
-        const data = await readFile(path);
-        const bytes = new Uint8Array(data);
-        // 加密文档：弹出密码框，取到密码后重试打开
-        opened = await openPdf(bytes, {
-          requestPassword: (wrong) =>
-            new Promise<string>((resolve, reject) => {
-              pendingPasswordRef.current = bytes;
-              setPasswordWrong(wrong);
-              setPasswordOpen(true);
-              passwordResolveRef.current = resolve;
-              passwordRejectRef.current = reject;
-            }),
-        });
-      } catch (err) {
-        // 用户取消密码输入：静默返回，不报"文件无效"
-        if (err instanceof Error && err.message === "password-cancelled") {
-          setLoading(false);
-          return;
-        }
-        setErrorKey("errorInvalid");
-        setLoading(false);
-        return;
-      }
-
-      // 打开成功：清理可能残留的密码弹窗状态
-      pendingPasswordRef.current = null;
-      passwordResolveRef.current = null;
-      passwordRejectRef.current = null;
-      setPasswordOpen(false);
-
-      try {
-        const page1 = await opened.doc.getPage(1);
-        const vp = page1.getViewport({ scale: 1 });
-
-        // 先销毁旧文档，再替换引用（避免 StrictMode 下 updater 跑两次）
-        destroyCurrent();
-        pdfRef.current = opened;
-        setPdf(opened);
-
-        const restored = loadProgress(path);
-        const total = opened.doc.numPages;
-        const page = Math.min(Math.max(1, restored?.page ?? 1), total);
-
-        setNumPages(total);
-        setCurrentPage(page);
-        setBasePage({ w: vp.width, h: vp.height });
-        pageSizesRef.current = new Map([[1, { w: vp.width, h: vp.height }]]);
-        setRefPage({ w: vp.width, h: vp.height });
-
-        // 恢复上次的视图偏好；无记录时默认固定 100%（不再自适应）
-        const sm = restored?.scaleMode ?? "custom";
-        setScaleMode(sm);
-        setFitIntent(restored?.fitIntent ?? "fit-width");
-        setScale(restored?.scale ?? 1);
-        setRotation(restored?.rotation ?? 0);
-        setPageLayout(restored?.pageLayout ?? "single");
-        setFlipMode(restored?.flipMode ?? "scroll");
-
-        setFileName(path.split(/[\\/]/).pop() ?? path);
-        setFilePath(path);
-        currentPathRef.current = path;
-        setRecentFiles(addRecent(path));
-
-        // 解析目录（失败不阻塞打开文档）
-        const parsedOutline = await loadOutline(opened.doc).catch(() => []);
-        setOutline(parsedOutline);
-        // 侧边栏默认状态：应用用户上次手动选择的展开/关闭偏好（无记录时默认展开）；
-        // 文档本身无目录时无论偏好如何都不展开（没有可导航的内容）
-        setSidebarTab("outline");
-        setSidebarOpen(loadSidebarPref() && parsedOutline.length > 0);
-
-        // 新文档：清空上一个文档的查找结果
-        setSearchMatches([]);
-        setActiveMatchId(null);
-        setFocusMatchId(null);
-
-        // 恢复到上次阅读页（首开时即第 1 页，无需滚动）
-        if (page > 1) setJumpTarget(page);
-      } catch {
-        setErrorKey("errorInvalid");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [destroyCurrent]
-  );
-  loadFileRef.current = loadFile;
-
-  /** 密码输入弹窗的 resolve/reject：由 openPdf 的 requestPassword 挂载 */
-  const passwordResolveRef = useRef<((value: string) => void) | null>(null);
-  const passwordRejectRef = useRef<((err: unknown) => void) | null>(null);
-
-  const handlePasswordSubmit = useCallback(
-    (password: string) => {
-      setPasswordOpen(false);
-      passwordResolveRef.current?.(password);
-      passwordResolveRef.current = null;
-      passwordRejectRef.current = null;
-    },
-    []
-  );
-
-  const handlePasswordCancel = useCallback(() => {
-    setPasswordOpen(false);
-    setLoading(false);
-    pendingPasswordRef.current = null;
-    // reject 会让 openPdf 中止；此时 requestPassword 已 reject，走 catch 静默返回
-    passwordRejectRef.current?.(new Error("password-cancelled"));
-    passwordResolveRef.current = null;
-    passwordRejectRef.current = null;
-  }, []);
-
   const handleOpenDialog = useCallback(async () => {
     const selected = await openFileDialog({
       multiple: false,
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     const path = typeof selected === "string" ? selected : null;
-    if (path) loadFileRef.current(path);
-  }, []);
-
-  /** 关闭当前文件，销毁文档资源并回到引导页 */
-  const closeFile = useCallback(() => {
-    destroyCurrent();
-    pdfRef.current = null;
-    setPdf(null);
-    setFileName("");
-    setFilePath("");
-    setNumPages(0);
-    setCurrentPage(1);
-    setJumpTarget(null);
-    setBasePage(null);
-    setRefPage(null);
-    pageSizesRef.current = new Map();
-    setScaleMode("custom");
-    setScale(1);
-    setFitScale(1);
-    setFitPageScale(1);
-    setRotation(0);
-    setErrorKey(null);
-    setOutline([]);
-    setSidebarOpen(false);
-    setSidebarTab("outline");
-    setRightOpen(false);
-    setRightTab("translate");
-    setSearchOpen(false);
-    setSearchMatches([]);
-    setActiveMatchId(null);
-    setFocusMatchId(null);
-    setPrinting(false);
-    setPrintProgress(null);
-    setPasswordOpen(false);
-    currentPathRef.current = "";
-  }, [destroyCurrent]);
+    if (path) loadFile(path);
+  }, [loadFile]);
 
   // ---------- 禁用右键菜单（阅读器场景） ----------
 
@@ -437,7 +360,7 @@ export default function App() {
             setErrorKey("errorMultipleFiles");
             return;
           }
-          loadFileRef.current(paths[0]);
+          loadFile(paths[0]);
         }
       });
       if (disposed) fn();
@@ -447,7 +370,7 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, []);
+  }, [loadFile, setErrorKey]);
 
   // ---------- 双击 PDF 文件启动 ----------
   // 首个实例读命令行参数；后续实例由单实例插件转发 open-file 事件
@@ -456,14 +379,14 @@ export default function App() {
     let disposed = false;
     void (async () => {
       const path = await takeStartupFile();
-      if (!disposed && path) loadFileRef.current(path);
+      if (!disposed && path) loadFile(path);
     })();
-    const unlisten = onOpenFile((path) => loadFileRef.current(path));
+    const unlisten = onOpenFile((path) => loadFile(path));
     return () => {
       disposed = true;
       void unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [loadFile]);
 
   // ---------- 缩放 ----------
 
@@ -537,7 +460,7 @@ export default function App() {
       })();
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [pdf, currentPage, basePage]);
+  }, [pdf, currentPage, basePage, pageSizesRef]);
 
   // fit 倍率随基准页和容器尺寸变化（基准页 = 当前页）。
   // 左右留白与 CSS 断点对齐：≤720px 时 slot padding 减半。
@@ -565,7 +488,7 @@ export default function App() {
       setCurrentPage(next);
       setJumpTarget(next);
     },
-    [numPages]
+    [numPages, setCurrentPage]
   );
 
   /**
@@ -576,11 +499,129 @@ export default function App() {
     (page: number) => {
       setCurrentPage(Math.min(Math.max(1, page), Math.max(1, numPages)));
     },
-    [numPages]
+    [numPages, setCurrentPage]
   );
+
+  // ---------- 自动阅读（自动滚动 / 自动翻页） ----------
+  const auto = useAutoReader({
+    containerRef: scrollContainerRef,
+    enabled: !!pdf,
+    flipMode,
+    numPages,
+    pageLayout,
+    currentPageRef,
+    goToPage,
+  });
+  /** 键盘 handler 用的 ref 镜像：避免把 auto.* 放进依赖导致监听反复重建 */
+  const autoActiveRef = useRef(false);
+  autoActiveRef.current = auto.isPlaying;
+  const autoToggleRef = useRef(auto.toggle);
+  autoToggleRef.current = auto.toggle;
+  const autoPauseRef = useRef(auto.pause);
+  autoPauseRef.current = auto.pause;
+  const autoStopRef = useRef(auto.stop);
+  autoStopRef.current = auto.stop;
+  /** 文档关闭（pdf 置空）时复位自动阅读状态，避免下一份文档打开后误显示"播放中" */
+  useEffect(() => {
+    if (!pdf) autoStopRef.current();
+  }, [pdf]);
 
   const handleJumpHandled = useCallback(() => setJumpTarget(null), []);
   const handleFocusHandled = useCallback(() => setFocusMatchId(null), []);
+
+  // ---------- 用户书签 ----------
+  /** 切换当前页书签（已标记则移除，未标记则添加），落盘并同步本地状态 */
+  const toggleCurrentBookmark = useCallback(() => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setBookmarks(toggleBookmark(path, currentPage));
+  }, [currentPage]);
+
+  /** 列表内「添加当前页」：每页至多一条，已存在则更新时间 */
+  const addCurrentBookmark = useCallback(() => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setBookmarks(addBookmark(path, currentPage, ""));
+  }, [currentPage]);
+
+  /** 移除指定索引的书签（索引对应当前 bookmarks 数组顺序） */
+  const removeBookmarkAtIdx = useCallback((index: number) => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setBookmarks(removeBookmarkAt(path, index));
+  }, []);
+
+  /** 重命名指定索引的书签（label 空串 = 恢复默认标题） */
+  const renameBookmarkAtIdx = useCallback((index: number, label: string) => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setBookmarks(renameBookmark(path, index, label));
+  }, []);
+
+  // ---------- 用户注释（高亮 / 下划线 / 删除线 / 文字批注） ----------
+
+  /**
+   * 选区气泡触发：创建注释后落盘并同步状态。
+   * 几何类注释与同页同类型重叠时由 lib 去重返回 null（忽略即可）；
+   * note 类型会随后打开批注浮层，锚点取选区左上角
+   */
+  const createAnnotation = useCallback(
+    (
+      type: AnnotationType,
+      cap: CaptureSelection,
+      anchor: { x: number; y: number },
+      color?: string
+    ) => {
+      const path = currentPathRef.current;
+      if (!path) return;
+      const result = addAnnotation(path, {
+        type,
+        page: cap.page,
+        rects: cap.rects,
+        text: cap.text,
+        ...(color ? { color } : {}),
+      });
+      if (!result) return;
+      setAnnotations(result);
+      if (type === "note") {
+        const created = result[result.length - 1];
+        setAnnoSel({ id: created.id, x: anchor.x, y: anchor.y, focus: true });
+      }
+    },
+    []
+  );
+
+  /** 页面注释 chip 点击：打开注释浮层（非新建，不聚焦输入框） */
+  const openAnnoPopup = useCallback((id: string, x: number, y: number) => {
+    setAnnoSel({ id, x, y, focus: false });
+  }, []);
+
+  /** 批注正文保存（note 类型） */
+  const saveAnnoNote = useCallback((id: string, note: string) => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setAnnotations(updateAnnotationNote(path, id, note));
+  }, []);
+
+  /** 修改几何注释落笔色；浮层保持打开，页面矩形/chip 即时变色预览 */
+  const recolorAnno = useCallback((id: string, color: string) => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setAnnotations(updateAnnotationColor(path, id, color));
+  }, []);
+
+  /** 删除注释；浮层随之关闭 */
+  const deleteAnno = useCallback((id: string) => {
+    const path = currentPathRef.current;
+    if (!path) return;
+    setAnnotations(removeAnnotation(path, id));
+    setAnnoSel(null);
+  }, []);
+
+  /** 当前浮层对应的注释（可能已被删除 → 浮层自动消失） */
+  const annoPopup = annoSel
+    ? (annotations.find((a) => a.id === annoSel.id) ?? null)
+    : null;
 
   // ---------- 阅读进度持久化 ----------
 
@@ -619,6 +660,7 @@ export default function App() {
     rotation,
     pageLayout,
     flipMode,
+    currentPathRef,
   ]);
 
   // ---------- 全文查找 ----------
@@ -710,15 +752,43 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!pdf) return;
-      if (e.target instanceof HTMLInputElement) return;
+      const target = e.target as HTMLElement | null;
+      const typing =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (typing) return;
       const step = pageLayout === "double" ? 2 : 1;
+      const autoActive = autoActiveRef.current;
+
+      // 空格：自动阅读 暂停/恢复（两种翻页模式通用）；未启动时按下即开始
+      if (e.key === " ") {
+        e.preventDefault();
+        autoToggleRef.current();
+        return;
+      }
+
+      // 手动导航键（方向键 / PageUp·Down / Home·End）：若自动阅读进行中先暂停，
+      // 把控制权交还用户（避免自动滚动与手动翻页互相抢占）
+      const isNav =
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowRight" ||
+        e.key === "ArrowDown" ||
+        e.key === "ArrowUp" ||
+        e.key === "PageDown" ||
+        e.key === "PageUp" ||
+        e.key === "Home" ||
+        e.key === "End";
+      if (autoActive && isNav) autoPauseRef.current();
+
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
         goToPage(currentPage + (e.key === "ArrowRight" ? step : -step));
         return;
       }
       if (flipMode !== "paged") return;
-      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
+      if (e.key === "ArrowDown" || e.key === "PageDown") {
         e.preventDefault();
         goToPage(currentPage + step);
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
@@ -847,7 +917,7 @@ export default function App() {
     if (!errorKey) return;
     const timer = window.setTimeout(() => setErrorKey(null), 4000);
     return () => window.clearTimeout(timer);
-  }, [errorKey]);
+  }, [errorKey, setErrorKey]);
 
   return (
     <div className="app">
@@ -872,6 +942,7 @@ export default function App() {
         onSetScale={setZoomExact}
         themePref={themePref}
         onSetThemePref={setThemePref}
+        pageFilter={pageFilter}
         onOpen={handleOpenDialog}
         onCloseFile={closeFile}
         onOpenAiSettings={() => setAiSettingsOpen(true)}
@@ -896,6 +967,10 @@ export default function App() {
         rightPanelOpen={rightOpen}
         onToggleRightPanel={() => setRightOpen((v) => !v)}
         disabled={!pdf}
+        autoPlaying={auto.isPlaying}
+        onToggleAuto={auto.toggle}
+        bookmarkedCurrent={bookmarks.some((b) => b.page === currentPage)}
+        onToggleBookmark={toggleCurrentBookmark}
       />
 
       <main className="reader">
@@ -915,6 +990,12 @@ export default function App() {
                 onTabChange={setSidebarTab}
                 currentPage={currentPage}
                 onNavigate={goToPage}
+                bookmarks={bookmarks}
+                onAddBookmark={addCurrentBookmark}
+                onRemoveBookmark={removeBookmarkAtIdx}
+                onRenameBookmark={renameBookmarkAtIdx}
+                annotations={annotations}
+                onDeleteAnnotation={deleteAnno}
                 onClose={() => {
                   setSidebarOpen(false);
                   saveSidebarPref(false);
@@ -930,27 +1011,51 @@ export default function App() {
                   onClose={closeSearch}
                 />
               )}
-              <PdfViewer
+              {/* 错误边界：单个页面渲染抛错时兜底，避免整页白屏；
+                  key 跟随文件名，切换文档自动重置 */}
+              <ErrorBoundary
                 key={fileName}
-                doc={pdf.doc}
-                numPages={numPages}
-                pageLayout={pageLayout}
-                flipMode={flipMode}
-                rotation={rotation}
-                currentPage={currentPage}
-                onCurrentPageChange={handlePageChange}
-                jumpTarget={jumpTarget}
-                onJumpHandled={handleJumpHandled}
-                effScale={effScale}
-                onZoomStep={stepZoom}
-                onWidthChange={setContainerWidth}
-                onHeightChange={setContainerHeight}
-                basePage={basePage}
-                searchMatches={searchMatches}
-                activeMatchId={activeMatchId}
-                focusMatchId={focusMatchId}
-                onFocusHandled={handleFocusHandled}
-              />
+                fallback={(reset) => <ViewerErrorFallback onRetry={reset} />}
+              >
+                <PdfViewer
+                  doc={pdf.doc}
+                  numPages={numPages}
+                  pageLayout={pageLayout}
+                  flipMode={flipMode}
+                  rotation={rotation}
+                  currentPage={currentPage}
+                  onCurrentPageChange={handlePageChange}
+                  jumpTarget={jumpTarget}
+                  onJumpHandled={handleJumpHandled}
+                  effScale={effScale}
+                  onZoomStep={stepZoom}
+                  onWidthChange={setContainerWidth}
+                  onHeightChange={setContainerHeight}
+                  basePage={basePage}
+                  searchMatches={searchMatches}
+                  annotations={annotations}
+                  onAnnoOpen={openAnnoPopup}
+                  activeMatchId={activeMatchId}
+                  focusMatchId={focusMatchId}
+                  onFocusHandled={handleFocusHandled}
+                  containerRef={scrollContainerRef}
+                  autoScrollingRef={auto.autoScrollingRef}
+                  onAutoScrollInterrupt={auto.pause}
+                />
+              </ErrorBoundary>
+              {auto.isPlaying && (
+                <AutoReaderBar
+                  speedValue={auto.speedValue(flipMode)}
+                  speedUnit={flipMode === "paged" ? t("autoSecPerPage") : "px/s"}
+                  paged={flipMode === "paged"}
+                  speedMin={flipMode === "paged" ? 0.1 : 1}
+                  speedIndex={auto.speedIndex(flipMode)}
+                  speedCount={auto.speedCount(flipMode)}
+                  onCycleSpeed={(d) => auto.cycleSpeed(d, flipMode)}
+                  onValueCommit={(n) => auto.commitSpeed(n, flipMode)}
+                  onClose={auto.stop}
+                />
+              )}
             </div>
             {rightOpen && (
               <RightPanel
@@ -1026,7 +1131,25 @@ export default function App() {
       {errorKey && <div className="error-toast">{t(errorKey)}</div>}
 
       {/* AI 划词/划句翻译：选中 PDF 文本后浮现气泡，点击请求 AI */}
-      <TranslatePopup engine={engine} rightPanel={{ open: rightOpen, tab: rightTab }} />
+      <TranslatePopup
+        engine={engine}
+        rightPanel={{ open: rightOpen, tab: rightTab }}
+        onAnnotate={createAnnotation}
+      />
+      {/* 注释浮层：chip 或新建批注后打开，可编辑正文 / 删除 */}
+      {annoSel && annoPopup && (
+        <AnnotationPopup
+          key={`${annoSel.id}-${annoSel.x}-${annoSel.y}-${annoSel.focus ? 1 : 0}`}
+          ann={annoPopup}
+          x={annoSel.x}
+          y={annoSel.y}
+          focusNote={annoSel.focus}
+          onSaveNote={saveAnnoNote}
+          onRecolor={recolorAnno}
+          onDelete={deleteAnno}
+          onClose={() => setAnnoSel(null)}
+        />
+      )}
       {aiSettingsOpen && <AiSettingsModal onClose={() => setAiSettingsOpen(false)} />}
       {shortcutsOpen && (
         <ShortcutsHelp onClose={() => setShortcutsOpen(false)} />

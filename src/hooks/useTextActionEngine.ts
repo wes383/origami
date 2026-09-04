@@ -1,14 +1,15 @@
 /**
- * 划词翻译 / Wikipedia 查询「引擎」。
+ * 划词翻译 / Wikipedia 查询 / AI 总结「引擎」。
  *
  * 把原先散落在 TranslatePopup 里的「请求 + 结果状态」抽离到这里，供两处消费：
  *   1. 选中文本后浮现的浮动气泡 / 浮动结果卡片（TranslatePopup）
  *   2. 右侧侧边栏面板（RightPanel）
  *
- * 路由规则：发起翻译 / Wikipedia 请求时，依据「右侧面板是否打开 + 当前 tab」
+ * 路由规则：发起翻译 / Wikipedia / AI 总结请求时，依据「右侧面板是否打开 + 当前 tab」
  * 决定结果落到「浮动卡片」还是「右侧面板」。
  *   - 面板打开且处于 translate tab → 翻译结果进面板
  *   - 面板打开且处于 wikipedia tab → Wikipedia 结果进面板
+ *   - 面板打开且处于 summary tab → AI 总结结果进面板
  *   - 其余（面板未打开 / 处于另一个 tab）→ 结果进浮动卡片
  *
  * 这样选中文本后若右侧面板已开在对应 tab，结果直接在面板里呈现，
@@ -25,8 +26,10 @@ import {
   loadAiConfig,
   loadTargetLang,
   saveAiConfig,
+  summarizeSelection,
   TARGET_AUTO,
   translateSelection,
+  type SummaryResult,
   type TranslateMode,
   type TranslateResult,
 } from "../lib/aiTranslate";
@@ -59,7 +62,15 @@ export type WikiCardState = {
   errorDetail: string | null;
 };
 
-export type RightTab = "translate" | "wikipedia";
+/** AI 总结结果卡（长文本选区；浮动或右侧面板 summary tab） */
+export type SummaryCardState = {
+  info: SelectionInfo;
+  status: "loading" | "done" | "error";
+  result: SummaryResult | null;
+  errorDetail: string | null;
+};
+
+export type RightTab = "translate" | "wikipedia" | "summary";
 
 export type RightPanelState = { open: boolean; tab: RightTab };
 
@@ -76,32 +87,45 @@ export function useTextActionEngine({
 
   const [floatingCard, setFloatingCard] = useState<CardState | null>(null);
   const [floatingWiki, setFloatingWiki] = useState<WikiCardState | null>(null);
+  const [floatingSummary, setFloatingSummary] = useState<SummaryCardState | null>(
+    null
+  );
   const [panelCard, setPanelCard] = useState<CardState | null>(null);
   const [panelWiki, setPanelWiki] = useState<WikiCardState | null>(null);
+  const [panelSummary, setPanelSummary] = useState<SummaryCardState | null>(
+    null
+  );
 
   const abortRef = useRef<AbortController | null>(null);
   /** 最近一次翻译结果所在位置，供「切换模型 / 重试」重新请求到同一处 */
   const lastTranslateLoc = useRef<RouteLoc | null>(null);
   const lastWikiLoc = useRef<RouteLoc | null>(null);
+  const lastSummaryLoc = useRef<RouteLoc | null>(null);
   // 最新结果快照（切换模型时读取当前卡片的 info / mode）
   const floatingCardRef = useRef<CardState | null>(null);
   const panelCardRef = useRef<CardState | null>(null);
   const floatingWikiRef = useRef<WikiCardState | null>(null);
   const panelWikiRef = useRef<WikiCardState | null>(null);
+  const floatingSummaryRef = useRef<SummaryCardState | null>(null);
+  const panelSummaryRef = useRef<SummaryCardState | null>(null);
   floatingCardRef.current = floatingCard;
   panelCardRef.current = panelCard;
   floatingWikiRef.current = floatingWiki;
   panelWikiRef.current = panelWiki;
+  floatingSummaryRef.current = floatingSummary;
+  panelSummaryRef.current = panelSummary;
   /** 最近一次翻译 / 查询所用选区：切 tab 时据此自动拉取目标 tab 的结果 */
   const lastSelectionRef = useRef<SelectionInfo | null>(null);
 
   /** 依据右侧面板状态推断结果落点（可被显式 route 覆盖） */
   const routeTarget = useCallback(
-    (kind: "translate" | "wiki"): RouteLoc => {
+    (kind: "translate" | "wiki" | "summary"): RouteLoc => {
       if (!rightPanel.open) return "floating";
       if (kind === "translate")
         return rightPanel.tab === "translate" ? "panel" : "floating";
-      return rightPanel.tab === "wikipedia" ? "panel" : "floating";
+      if (kind === "wiki")
+        return rightPanel.tab === "wikipedia" ? "panel" : "floating";
+      return rightPanel.tab === "summary" ? "panel" : "floating";
     },
     [rightPanel.open, rightPanel.tab]
   );
@@ -125,6 +149,19 @@ export function useTextActionEngine({
       setFloatingWiki(state);
     }
   }, []);
+
+  const setSummaryAt = useCallback(
+    (loc: RouteLoc, state: SummaryCardState) => {
+      if (loc === "panel") {
+        setFloatingSummary(null);
+        setPanelSummary(state);
+      } else {
+        setPanelSummary(null);
+        setFloatingSummary(state);
+      }
+    },
+    []
+  );
 
   // ---------- 发起翻译请求 ----------
 
@@ -231,6 +268,61 @@ export function useTextActionEngine({
     [routeTarget, setWikiAt, uiLang]
   );
 
+  // ---------- 发起 AI 总结请求（长文本选区；随右侧面板开合路由到面板或浮动卡） ----------
+
+  const runSummarize = useCallback(
+    (info: SelectionInfo, route?: RouteLoc) => {
+      lastSelectionRef.current = info;
+      const loc = route ?? routeTarget("summary");
+      abortRef.current?.abort();
+      const config = loadAiConfig();
+      if (!isAiConfigured(config)) {
+        setFloatingSummary(null);
+        setPanelSummary(null);
+        onOpenSettings();
+        return;
+      }
+      const ac = new AbortController();
+      abortRef.current = ac;
+      lastSummaryLoc.current = loc;
+      setSummaryAt(loc, {
+        info,
+        status: "loading",
+        result: null,
+        errorDetail: null,
+      });
+      const raw = loadTargetLang();
+      const target = raw === TARGET_AUTO ? uiLang : raw;
+      summarizeSelection({
+        config,
+        text: info.text,
+        context: info.context,
+        lang: target,
+        signal: ac.signal,
+      })
+        .then((result) => {
+          if (ac.signal.aborted) return;
+          setSummaryAt(loc, {
+            info,
+            status: "done",
+            result,
+            errorDetail: null,
+          });
+        })
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          const detail = describeAiError(err);
+          setSummaryAt(loc, {
+            info,
+            status: "error",
+            result: null,
+            errorDetail: detail,
+          });
+        });
+    },
+    [onOpenSettings, routeTarget, setSummaryAt, uiLang]
+  );
+
   /** 用系统默认浏览器打开条目（Tauri opener 插件；非 Tauri 环境回退 window.open） */
   const handleOpenWiki = useCallback(() => {
     const loc = lastWikiLoc.current;
@@ -254,8 +346,17 @@ export function useTextActionEngine({
       const loc = lastTranslateLoc.current;
       const cur = loc === "panel" ? panelCardRef.current : floatingCardRef.current;
       if (loc && cur) runTranslate(cur.info, cur.mode, loc);
+      // 没有翻译卡可重跑时，若正显示 AI 总结卡（浮动或面板）则用新模型重新总结
+      else {
+        const sloc = lastSummaryLoc.current;
+        const scur =
+          sloc === "panel"
+            ? panelSummaryRef.current
+            : floatingSummaryRef.current;
+        if (sloc && scur) runSummarize(scur.info, sloc);
+      }
     },
-    [runTranslate]
+    [runTranslate, runSummarize]
   );
 
   // ---------- 重试 ----------
@@ -272,17 +373,27 @@ export function useTextActionEngine({
     if (loc && cur) runWiki(cur.info, loc);
   }, [runWiki]);
 
+  const retrySummarize = useCallback(() => {
+    const loc = lastSummaryLoc.current;
+    const cur =
+      loc === "panel" ? panelSummaryRef.current : floatingSummaryRef.current;
+    if (loc && cur) runSummarize(cur.info, loc);
+  }, [runSummarize]);
+
   // ---------- 关闭（仅清对应位置的结果；右侧面板为停靠 UI，不在此处清空） ----------
 
   const closeFloatingCard = useCallback(() => setFloatingCard(null), []);
   const closeFloatingWiki = useCallback(() => setFloatingWiki(null), []);
+  const closeFloatingSummary = useCallback(() => setFloatingSummary(null), []);
   const closePanelCard = useCallback(() => setPanelCard(null), []);
   const closePanelWiki = useCallback(() => setPanelWiki(null), []);
+  const closePanelSummary = useCallback(() => setPanelSummary(null), []);
 
   /** 清空右侧面板内容（关闭面板 / 切换文档时调用） */
   const clearPanel = useCallback(() => {
     setPanelCard(null);
     setPanelWiki(null);
+    setPanelSummary(null);
   }, []);
 
   /** 收起浮动卡片（点击外部 / Esc）。不碰面板内容 */
@@ -291,12 +402,14 @@ export function useTextActionEngine({
     abortRef.current = null;
     setFloatingCard(null);
     setFloatingWiki(null);
+    setFloatingSummary(null);
   }, []);
 
   /**
    * 切换面板 tab 时，若当前有已记录的选区、且目标 tab 尚无对应结果（或与当前
    * 选区不一致），则自动用该选区拉取目标 tab 的内容。实现预期行为：在翻译 tab
    * 选中文本后切到 Wikipedia tab，即对已选文本直接查词并展示，无需重新划词。
+   * 词/长文本适用性按目标 tab 判定：wiki 仅词级选区、summary 仅句子级长文本。
    * 仅在 tab 真正切换时触发（打开/关闭面板、同 tab 不触发）。
    */
   const prevTabRef = useRef(rightPanel.tab);
@@ -312,29 +425,46 @@ export function useTextActionEngine({
       if (!cur || cur.info.text !== info.text) {
         runTranslate(info, detectMode(info.text), "panel");
       }
-    } else {
+    } else if (rightPanel.tab === "wikipedia") {
       const cur = panelWikiRef.current;
-      if (!cur || cur.info.text !== info.text) {
+      if (
+        detectMode(info.text) === "word" &&
+        (!cur || cur.info.text !== info.text)
+      ) {
         runWiki(info, "panel");
       }
+    } else {
+      const cur = panelSummaryRef.current;
+      if (
+        detectMode(info.text) !== "word" &&
+        (!cur || cur.info.text !== info.text)
+      ) {
+        runSummarize(info, "panel");
+      }
     }
-  }, [rightPanel.tab, rightPanel.open, runTranslate, runWiki]);
+  }, [rightPanel.tab, rightPanel.open, runTranslate, runWiki, runSummarize]);
 
   return {
     floatingCard,
     floatingWiki,
+    floatingSummary,
     panelCard,
     panelWiki,
+    panelSummary,
     runTranslate,
     runWiki,
+    runSummarize,
     switchModel,
     retryTranslate,
     retryWiki,
+    retrySummarize,
     handleOpenWiki,
     closeFloatingCard,
     closeFloatingWiki,
+    closeFloatingSummary,
     closePanelCard,
     closePanelWiki,
+    closePanelSummary,
     clearPanel,
     closeAll,
   };
