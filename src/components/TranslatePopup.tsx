@@ -315,7 +315,7 @@ export default function TranslatePopup({
     };
   }, [closeAll, readSelection, engine.runTranslate, engine.runWiki, rightPanel.open, rightPanel.tab]);
 
-  // 划词快捷键：选中 PDF 文本后按 T 触发 AI 翻译、按 W 搜索 Wikipedia
+  // 划词快捷键：选中 PDF 文本后按 T 触发 AI 翻译、按 W 搜索 Wikipedia、按 S 触发 AI 总结
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       // 仅裸键（无 Ctrl/Alt/Shift 修饰）；输入框内不触发
@@ -329,7 +329,7 @@ export default function TranslatePopup({
       )
         return;
       const key = e.key.toLowerCase();
-      if (key !== "t" && key !== "w") return;
+      if (key !== "t" && key !== "w" && key !== "s") return;
       // 优先用已显示的选区气泡，否则实时读取 PDF 文本层选区
       const info = bubbleRef.current ?? readSelection();
       if (!info) return;
@@ -337,11 +337,14 @@ export default function TranslatePopup({
       // 路由交给引擎：面板开在对应 tab 时结果直接进面板
       if (key === "t") engine.runTranslate(info, detectMode(info.text));
       // W = Wikipedia 词/短语查询：句子级长文本忽略按键（与按钮隐藏策略一致）
-      else if (wikiQueryable(info.text)) engine.runWiki(info);
+      else if (key === "w" && wikiQueryable(info.text)) engine.runWiki(info);
+      // S = AI 总结：仅句子/段落级长文本（与按钮显示策略一致），词/短语忽略按键
+      else if (key === "s" && !wikiQueryable(info.text))
+        engine.runSummarize(info);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [engine.runTranslate, engine.runWiki, readSelection]);
+  }, [engine.runTranslate, engine.runWiki, engine.runSummarize, readSelection]);
 
   // 组件卸载时中止进行中的请求（依赖稳定的 engine.closeAll，避免每帧重渲染触发清理而清空卡片）
   useEffect(() => () => engine.closeAll(), [engine.closeAll]);
@@ -358,7 +361,8 @@ export default function TranslatePopup({
    */
   const annotate = useCallback(
     (type: AnnotationType, color?: string) => {
-      const info = bubbleRef.current;
+      // 优先用气泡选区（按钮路径）；气泡已收起（快捷键路径）则实时读文本层选区
+      const info = bubbleRef.current ?? readSelection();
       if (!info) return;
       const cap = captureSelectionRects();
       if (!cap) return;
@@ -367,7 +371,7 @@ export default function TranslatePopup({
       window.getSelection()?.removeAllRanges();
       onAnnotate(type, cap, { x: info.rect.x, y: info.rect.y }, color);
     },
-    [onAnnotate]
+    [onAnnotate, readSelection]
   );
 
   /**
@@ -401,6 +405,36 @@ export default function TranslatePopup({
     },
     [lastColors]
   );
+
+  // 划词注释快捷键：选中文本后按 H 高亮、U 下划线、D 删除线、N 文字批注。
+  // 颜色策略与气泡一级菜单一致：几何类用该类型「最近一次使用」的颜色。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      // 仅裸键（无 Ctrl/Alt/Shift 修饰）；输入框内不触发（含批注编辑框）
+      if (e.ctrlKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      )
+        return;
+      const key = e.key.toLowerCase();
+      let type: AnnotationType | null = null;
+      if (key === "h") type = "highlight";
+      else if (key === "u") type = "underline";
+      else if (key === "d") type = "strikeout";
+      else if (key === "n") type = "note";
+      if (!type) return;
+      // 无选区时忽略（气泡选区或文本层选区至少一个存在）
+      if (!bubbleRef.current && !readSelection()) return;
+      e.preventDefault();
+      commitAnno(type);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [commitAnno, readSelection]);
 
   // ---------- 渲染 ----------
 

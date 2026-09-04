@@ -1397,6 +1397,17 @@ button:disabled {
   color: var(--foreground-faint);
 }
 
+/* 带图标的小节标签（如「语言」）：图标继承标签的弱化前景色，与其余下拉项图标对齐 */
+.tb-label-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tb-label-icon svg {
+  flex: none;
+}
+
 .tb-dropdown-row {
   display: flex;
   flex-wrap: wrap; /* 文案总宽超出一行时换行，保证长文案完整可见 */

@@ -150,6 +150,7 @@ searchRegexError: "正規表現が無効、または空文字列に一致しま�
   shortcutZoomReset: "ズームをリセット（100%）",
   shortcutFit: "幅 / ページへの表示を切替",
   shortcutWikipedia: "Wikipedia で検索",
+  shortcutSummary: "AI 要約",
   shortcutHelp: "このヘルプを表示",
   shortcutSelectionHint: "テキストを選択後",
   aiSidebar: "翻訳サイドバー",

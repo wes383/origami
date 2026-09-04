@@ -388,7 +388,10 @@ export default function Toolbar({
 
               <div className="tb-dropdown-separator" />
 
-              <div className="tb-dropdown-label">{t("language")}</div>
+              <div className="tb-dropdown-label tb-label-icon">
+                <LanguagesIcon size={13} />
+                <span>{t("language")}</span>
+              </div>
               <div className="tb-lang-wrap" ref={langWrapRef}>
                 <button
                   type="button"

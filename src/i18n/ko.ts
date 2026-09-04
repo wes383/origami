@@ -150,6 +150,7 @@ searchRegexError: "정규식이 잘못되었거나 빈 문자열과 일치합니
   shortcutZoomReset: "확대 초기화 (100%)",
   shortcutFit: "맞춤 너비 / 페이지 전환",
   shortcutWikipedia: "Wikipedia 검색",
+  shortcutSummary: "AI 요약",
   shortcutHelp: "이 도움말 표시",
   shortcutSelectionHint: "텍스트 선택 후 사용",
   aiSidebar: "번역 사이드바",

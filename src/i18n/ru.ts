@@ -150,6 +150,7 @@ searchRegexError: "Недопустимое регулярное выражен�
   shortcutZoomReset: "Сбросить масштаб (100 %)",
   shortcutFit: "Переключить по ширине / по странице",
   shortcutWikipedia: "Искать в Википедии",
+  shortcutSummary: "Сводка ИИ",
   shortcutHelp: "Показать эту справку",
   shortcutSelectionHint: "После выделения текста",
   aiSidebar: "Панель перевода",
