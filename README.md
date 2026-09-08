@@ -11,7 +11,7 @@ English | [简体中文](README.zh-CN.md)
 - **Translation**: select text and look it up with AI translation or Wikipedia, shown in the right panel
 - **Extras**: file properties, print, recent files, light/dark theme, 10 UI languages, keyboard shortcuts, fullscreen
 
-<img width="2880" height="1704" alt="2026-09-08_17-06-50" src="https://github.com/user-attachments/assets/e720160e-eff8-4393-9d10-42eb64d24e10" />
+<img width="2880" height="1704" alt="2026-09-08_17-11-42" src="https://github.com/user-attachments/assets/ebe2bccc-4c1e-4446-b994-048aa0fb72da" />
 
 ## Tech Stack
 
