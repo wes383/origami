@@ -11,7 +11,7 @@
 - **翻译**：选中文本后通过 AI 翻译或 Wikipedia 查词，结果显示在右侧面板
 - **其他**：文件属性、打印、最近文件、浅色/深色主题、10 种界面语言、快捷键、全屏
 
-<img width="2880" height="1704" alt="2026-09-08_17-06-50" src="https://github.com/user-attachments/assets/dafc15fe-05a0-474f-a1a6-30629a256fac" />
+<img width="2880" height="1704" alt="2026-09-08_17-11-42" src="https://github.com/user-attachments/assets/b5d716a5-f286-4256-b98f-c4a0f0ed6710" />
 
 ## 技术栈
 
