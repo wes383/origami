@@ -13,7 +13,6 @@ English | [简体中文](README.zh-CN.md)
 
 <img width="2880" height="1704" alt="2026-09-08_17-06-50" src="https://github.com/user-attachments/assets/e720160e-eff8-4393-9d10-42eb64d24e10" />
 
-
 ## Tech Stack
 
 | Layer | Technology |
